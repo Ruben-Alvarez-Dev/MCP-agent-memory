@@ -1,0 +1,24 @@
+name: Mirror to Jart-OS
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Mirror to Jart-OS organization
+        env:
+          JART_OS_TOKEN: ${{ secrets.JART_OS_TOKEN }}
+        run: |
+          git remote add mirror "https://Jart-OS:@github.com/Jart-OS/MCP-memory-server.git" 2>/dev/null || git remote set-url mirror "https://Jart-OS:@github.com/Jart-OS/MCP-memory-server.git"
+          git push mirror main --force
