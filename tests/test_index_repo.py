@@ -9,7 +9,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from shared.retrieval.index_repo import _build_code_map_points, upsert_repository_index
+from shared.retrieval.index_repo import build_code_map_points, upsert_repository_index
 from shared.retrieval.code_map import CodeMap
 
 # --- Mocks and Fixtures ---
@@ -26,13 +26,13 @@ def temp_project(tmp_path: Path) -> Path:
     return tmp_path
 
 @pytest.mark.asyncio
-async def test_build_code_map_points_structure(temp_project: Path):
+async def testbuild_code_map_points_structure(temp_project: Path):
     """Verifies the structure and content of generated Qdrant points."""
     
     async def mock_embed_fn(text: str):
         return [0.1] * 5
 
-    points = await _build_code_map_points(str(temp_project), mock_embed_fn)
+    points = await build_code_map_points(str(temp_project), mock_embed_fn)
 
     assert len(points) == 3 # .py, .js, .md files
 

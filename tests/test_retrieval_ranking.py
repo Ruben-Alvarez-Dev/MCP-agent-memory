@@ -8,7 +8,8 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from shared.retrieval import _rank_and_fuse
-from shared.llm.config import ContextItem, QueryIntent
+from shared.retrieval import ContextItem
+from shared.llm.config import QueryIntent
 
 @pytest.mark.asyncio
 async def test_rank_and_fuse_sorts_by_score_by_default():
