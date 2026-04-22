@@ -41,9 +41,9 @@
 - [ ] Replace all `datetime.utcnow()` with `datetime.now(timezone.utc)`
 - [ ] Replace all bare `except:` with proper error handling + logging
 - [ ] Add structured logging to all modules
-- [ ] Full type hints on all public functions
-- [ ] Fix BM25 tokenizer hash (use proper hashing, not MD5 truncation)
-- [ ] Integration test: unified server starts, all 51 tools callable
+- [x] Full type hints (all tools have typed returns) on all public functions
+- [x] Fix BM25 tokenizer hash (use proper hashing, not MD5 truncation)
+- [x] Integration test: unified server starts, all 51 tools callable
 - [ ] Phase 5 acceptance: zero bare excepts, full type hints, all tests pass
 
 ## Completion Criteria
