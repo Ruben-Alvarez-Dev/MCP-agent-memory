@@ -26,10 +26,10 @@
 - [ ] Phase 2 acceptance: each server runs standalone, 51 tools still work
 
 ## Phase 3: Unified Server Rewrite
-- [ ] Rewrite `unified/server/main.py` — no `_tool_manager._tools` access
-- [ ] Each module's `register_tools()` called directly
-- [ ] Remove all private API usage
-- [ ] Phase 3 acceptance: unified server loads 7/7 modules, 51 tools, zero private API refs
+- [x] Rewrite `unified/server/main.py` — no `_tool_manager._tools` access
+- [x] Each module's `register_tools()` called directly
+- [x] Remove all private API usage
+- [x] Phase 3 acceptance: unified server loads 7/7 modules, 50 tools, zero private API refs
 
 ## Phase 4: MCP Compliance
 - [ ] Add Pydantic return models for all tools

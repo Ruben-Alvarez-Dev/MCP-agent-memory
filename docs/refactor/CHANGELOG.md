@@ -65,14 +65,18 @@ Format: [Phase] - YYYY-MM-DD
 
 ---
 
-## [Phase 3] - TBD
+## [Phase 3] - 2026-04-22
 
 ### Changed
 - Unified server rewritten to use public API only
-- No private `_tool_manager._tools` access
+- Each module's register_tools() called directly instead of extracting from private _tool_manager
+- Dynamic module loading with prefixed tool names
 
 ### Removed
-- All private FastMCP API usage
+- All private FastMCP API usage (`_tool_manager._tools`)
+
+### Commit
+- `7710a05` — refactor(unified): rewrite server to use public API only
 
 ---
 
