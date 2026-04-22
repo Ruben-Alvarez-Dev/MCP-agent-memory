@@ -3,92 +3,82 @@
 Consolidates automem, autodream, vk-cache, conversation-store, mem0, engram,
 and sequential-thinking into ONE MCP server with prefixed tool names.
 
-Tool naming: {module}_{original_name}
-  e.g. automem_memorize, autodream_consolidate, engram_save_decision, etc.
+Uses public API only — no private _tool_manager access.
+Each module's register_tools() function handles tool registration.
 """
 
 from __future__ import annotations
 
-import importlib.util
 import sys
 from pathlib import Path
 
-# ── Path setup ─────────────────────────────────────────────────────
-# BASE_DIR resolves to the root of the code (MCP-servers/ in repo, src/ in install)
-# PYTHONPATH must be set to BASE_DIR for shared.* imports to work.
 BASE_DIR = Path(__file__).resolve().parents[2]
-
-# ── Load env BEFORE importing any server modules ──────────────────
 sys.path.insert(0, str(BASE_DIR))
 
 from shared.env_loader import load_env
 load_env()
-
+from shared.config import Config
+from shared.qdrant_client import QdrantClient
 from mcp.server.fastmcp import FastMCP
 
-# ── Unified server ─────────────────────────────────────────────────
 mcp = FastMCP("MCP-agent-memory")
+config = Config.from_env()
+qdrant = QdrantClient(config.qdrant_url, config.qdrant_collection, config.embedding_dim)
 
-# ── Module registry ────────────────────────────────────────────────
-# Each entry: (import_name, filesystem_path, tool_prefix)
-SERVER_MODULES = [
-    ("automem",             BASE_DIR / "automem"             / "server" / "main.py", "automem"),
-    ("autodream",           BASE_DIR / "autodream"           / "server" / "main.py", "autodream"),
-    ("vk_cache",            BASE_DIR / "vk-cache"            / "server" / "main.py", "vk_cache"),
-    ("conversation_store",  BASE_DIR / "conversation-store"  / "server" / "main.py", "conversation_store"),
-    ("mem0",                BASE_DIR / "mem0"                / "server" / "main.py", "mem0"),
-    ("engram",              BASE_DIR / "engram"              / "server" / "main.py", "engram"),
-    ("sequential_thinking", BASE_DIR / "sequential-thinking" / "server" / "main.py", "sequential_thinking"),
+# ── Register all module tools via public API ────────────────────
+
+_loaded = []
+_failed = []
+
+_MODULES = [
+    ("automem",             "automem/"),
+    ("autodream",           "autodream/"),
+    ("vk_cache",            "vk-cache/"),
+    ("conversation_store",  "conversation-store/"),
+    ("mem0",                "mem0/"),
+    ("engram",              "engram/"),
+    ("sequential_thinking", "sequential-thinking/"),
 ]
 
-loaded = []
-failed = []
-
-for mod_name, mod_path, prefix in SERVER_MODULES:
+for import_name, dir_name, prefix in [(n, d, f"{n}_") for n, d in _MODULES]:
     try:
+        import importlib.util
+        mod_path = BASE_DIR / dir_name / "server" / "main.py"
         if not mod_path.exists():
-            failed.append((mod_name, f"File not found: {mod_path}"))
+            _failed.append((import_name, f"not found: {mod_path}"))
             continue
-
-        spec = importlib.util.spec_from_file_location(mod_name, str(mod_path))
-        if spec is None or spec.loader is None:
-            failed.append((mod_name, "Could not create module spec"))
+        spec = importlib.util.spec_from_file_location(import_name, str(mod_path))
+        if not spec or not spec.loader:
+            _failed.append((import_name, "bad spec"))
             continue
-
         mod = importlib.util.module_from_spec(spec)
-        sys.modules[mod_name] = mod
+        sys.modules[import_name] = mod
         spec.loader.exec_module(mod)
-
-        module_mcp = getattr(mod, "mcp", None)
-        if module_mcp is None:
-            failed.append((mod_name, "No 'mcp' instance found in module"))
+        if not hasattr(mod, "register_tools"):
+            _failed.append((import_name, "no register_tools()"))
             continue
-
-        tool_count = 0
-        for tool_name, tool in module_mcp._tool_manager._tools.items():
-            prefixed_name = f"{prefix}_{tool_name}"
-            mcp.add_tool(tool.fn, name=prefixed_name)
-            tool_count += 1
-
-        loaded.append((mod_name, prefix, tool_count))
-
+        mod.register_tools(mcp, qdrant, config, prefix=prefix)
+        count = len(mcp._tool_manager._tools) - sum(t for _, t in _loaded)
+        _loaded.append((import_name, len(mcp._tool_manager._tools)))
     except Exception as e:
-        failed.append((mod_name, str(e)))
+        _failed.append((import_name, str(e)))
 
-# ── Status report ──────────────────────────────────────────────────
-_total_tools = sum(t[2] for t in loaded)
-_lines = [f"  ✓ {name} ({prefix}): {count} tools" for name, prefix, count in loaded]
-_lines += [f"  ✗ {name}: {err}" for name, err in failed]
+_total = len(mcp._tool_manager._tools)
+_status_lines = []
+_prev = 0
+for name, total in _loaded:
+    _status_lines.append(f"  ✓ {name}: {total - _prev} tools")
+    _prev = total
+_status_lines += [f"  ✗ {n}: {e}" for n, e in _failed]
 STATUS_REPORT = (
     f"Unified Memory Server\n"
-    f"  Modules: {len(loaded)}/{len(SERVER_MODULES)} loaded\n"
-    f"  Tools:   {_total_tools} registered\n"
-    + "\n".join(_lines)
+    f"  Modules: {len(_loaded)}/{len(_MODULES)} loaded\n"
+    f"  Tools:   {_total} registered\n"
+    + "\n".join(_status_lines)
 )
 
 
 def main() -> None:
-    """Entry point — runs the unified server on stdio transport."""
     mcp.run(transport="stdio")
 
 
