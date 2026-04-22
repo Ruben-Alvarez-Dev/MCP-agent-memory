@@ -32,10 +32,10 @@
 - [x] Phase 3 acceptance: unified server loads 7/7 modules, 50 tools, zero private API refs
 
 ## Phase 4: MCP Compliance
-- [ ] Add Pydantic return models for all tools
-- [ ] Add MCP annotations (readOnlyHint, destructiveHint, etc.)
-- [ ] Implement `@mcp.resource()` for status endpoints
-- [ ] Phase 4 acceptance: tools return structured output, annotations present
+- [x] Add Pydantic return models for all tools
+- [x] Add MCP annotations (readOnlyHint, destructiveHint, etc.)
+- [x] Implement resource()` for status endpoints
+- [x] Phase 4 acceptance: tools return structured output, annotations present
 
 ## Phase 5: Quality & Testing
 - [ ] Replace all `datetime.utcnow()` with `datetime.now(timezone.utc)`
