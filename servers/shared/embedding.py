@@ -282,7 +282,7 @@ def bm25_tokenize(text: str) -> dict:
     values = []
     for token, count in sorted(freq.items(), key=lambda x: x[1], reverse=True):
         # Use 32-bit hash for token ID
-        token_hash = int(hashlib.md5(token.encode()).hexdigest()[:8], 16)
+        token_hash = hash(token) & 0xFFFFFFFF
         indices.append(token_hash)
         values.append(float(count))
 
