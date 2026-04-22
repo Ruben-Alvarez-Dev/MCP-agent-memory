@@ -1,8 +1,9 @@
 #!/bin/bash
-# services.sh — Qdrant and launchd service management
+# services.sh — Qdrant + llama-server management
 set -euo pipefail
 INSTALL_DIR="${1:?Usage: services.sh <install_dir>}"
 QDRANT_PORT="${2:-6333}"
+LLAMA_PORT="${4:-8081}"
 
 start_qdrant() {
     if [ -f "$INSTALL_DIR/bin/qdrant" ]; then
@@ -37,9 +38,50 @@ create_collections() {
     done
 }
 
+start_llama_server() {
+    local MODEL=$(find "$INSTALL_DIR/models" -name "bge-m3*.gguf" | head -1)
+    if [ -z "$MODEL" ]; then
+        MODEL=$(find "$INSTALL_DIR/models" -name "*.gguf" | head -1)
+    fi
+    if [ -z "$MODEL" ]; then
+        echo "  ⚠ No .gguf model found in $INSTALL_DIR/models/"
+        return 1
+    fi
+    local LLAMA_BIN=$(command -v llama-server 2>/dev/null || echo "$INSTALL_DIR/engine/bin/llama-server")
+    if [ ! -x "$LLAMA_BIN" ]; then
+        echo "  ⚠ llama-server binary not found"
+        return 1
+    fi
+    nohup "$LLAMA_BIN" -m "$MODEL" --embedding --pooling mean -ngl 99 \
+        --host 127.0.0.1 --port "$LLAMA_PORT" \
+        > /tmp/llama-server.log 2>&1 &
+    echo "  ✓ llama-server starting (port $LLAMA_PORT, model: $(basename "$MODEL"))"
+}
+
+stop_llama_server() {
+    pkill -f "llama-server.*$LLAMA_PORT" 2>/dev/null && echo "  ✓ llama-server stopped" || echo "  ⚠ llama-server not running"
+}
+
+status_llama_server() {
+    if curl -s "http://127.0.0.1:$LLAMA_PORT/health" >/dev/null 2>&1; then
+        echo "  ✓ llama-server healthy (port $LLAMA_PORT)"
+    else
+        echo "  ✗ llama-server not responding"
+    fi
+}
+
 case "${3:-start}" in
-    start) start_qdrant; sleep 2; create_collections ;;
-    stop) stop_qdrant ;;
-    status) status_qdrant ;;
-    *) echo "Usage: services.sh <dir> <port> [start|stop|status]" ;;
+    start)
+        start_qdrant; sleep 2; create_collections
+        start_llama_server; echo "  ⏳ Waiting for llama-server to load model..."; sleep 15
+        ;;
+    stop)
+        stop_qdrant; stop_llama_server
+        ;;
+    status)
+        status_qdrant; status_llama_server
+        ;;
+    *)
+        echo "Usage: services.sh <dir> <qdrant_port> [start|stop|status] [llama_port]"
+        ;;
 esac
