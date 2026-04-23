@@ -39,19 +39,21 @@ A unified MCP (Model Context Protocol) memory server that provides persistent, m
 
 ## Installation
 
-### One-liner
-
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Ruben-Alvarez-Dev/MCP-agent-memory/main/install.sh | bash
-```
-
-### Manual
-
-```bash
-git clone https://github.com/Ruben-Alvarez-Dev/MCP-agent-memory.git
-cd MCP-agent-memory
+git clone https://github.com/Ruben-Alvarez-Dev/MCP-agent-memory.git ~/MCP-servers/MCP-agent-memory
+cd ~/MCP-servers/MCP-agent-memory
 bash install.sh
 ```
+
+The installer performs 8 steps with a visual checklist:
+- Python venv creation
+- Dependency installation (pydantic, httpx, mcp)
+- Qdrant vector database startup
+- BGE-M3 embedding model download + llama-server startup
+- Ollama LLM backend detection
+- Config generation (.env + directory structure)
+- MCP client configuration (auto-detects Pi, Claude Desktop)
+- Full verification (imports, config, connectivity, unit tests)
 
 ## Configuration
 
