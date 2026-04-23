@@ -209,7 +209,7 @@ async def _retrieve_parallel(
     for name, task in tasks.items():
         try:
             raw_results[name] = await task
-        except:
+        except Exception:
             raw_results[name] = []
     return raw_results
 
@@ -297,7 +297,7 @@ async def _retrieve_engram(intent: QueryIntent, k: int) -> list[ContextItem]:
                         metadata={"type": "decision"},
                     )
                 )
-        except:
+        except Exception:
             pass
     results.sort(key=lambda x: x.score, reverse=True)
     return results[:k]
@@ -405,7 +405,7 @@ def _parse_ts(ts_str: Any) -> datetime | None:
         return None
     try:
         return datetime.fromisoformat(str(ts_str).replace("Z", "+00:00"))
-    except:
+    except Exception:
         return None
 
 

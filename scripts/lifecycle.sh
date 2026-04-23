@@ -301,7 +301,79 @@ else
     skip "Reminders: directory not found"
 fi
 
-# 6. Qdrant Backup
+# 6. Qdrant Point Purge (L0/L1 only, never touch L3/L4)
+log "🗄️  Qdrant Point Purge (L0/L1 stale points)"
+PYTHON="${PROJECT_ROOT}/.venv/bin/python3"
+QDRANT_URL="${QDRANT_URL:-http://127.0.0.1:6333}"
+L1_MAX_AGE_DAYS="${L1_MAX_AGE_DAYS:-30}"
+L0_MAX_AGE_DAYS="${L0_MAX_AGE_DAYS:-90}"
+if command -v "$PYTHON" &>/dev/null; then
+    PURGE_RESULT=$("$PYTHON" -c "
+import json, urllib.request, sys, time
+from datetime import datetime, timezone, timedelta
+
+url = '${QDRANT_URL}'
+l1_max = int('${L1_MAX_AGE_DAYS}')
+l0_max = int('${L0_MAX_AGE_DAYS}')
+dry = $( [ "$DRY_RUN" = true ] && echo 'True' || echo 'False' )
+now = time.time()
+total_purged = 0
+
+for col in ['automem', 'mem0_memories', 'conversations']:
+    try:
+        # Scroll points with layer info
+        body = json.dumps({'limit': 100, 'with_payload': True}).encode()
+        req = urllib.request.Request(f'{url}/collections/{col}/points/scroll', data=body, headers={'Content-Type': 'application/json'})
+        resp = urllib.request.urlopen(req)
+        data = json.loads(resp.read())
+        points = data.get('result', {}).get('points', [])
+        
+        ids_to_delete = []
+        for p in points:
+            payload = p.get('payload', {})
+            layer = payload.get('layer', '')
+            created = payload.get('created_at', '')
+            
+            # Never purge L3 or L4
+            if layer in ('L3_SEMANTIC', 'L4_CONSOLIDATED'):
+                continue
+            
+            # Check age
+            if not created:
+                continue
+            try:
+                ct = datetime.fromisoformat(created.replace('Z', '+00:00')).timestamp()
+            except:
+                continue
+            
+            age_days = (now - ct) / 86400
+            max_age = l0_max if layer == 'L0_RAW' else l1_max
+            
+            if age_days > max_age:
+                ids_to_delete.append(p.get('id', ''))
+        
+        if ids_to_delete:
+            if dry:
+                print(f'  {col}: DRY RUN would purge {len(ids_to_delete)} points')
+            else:
+                del_body = json.dumps({'points': ids_to_delete}).encode()
+                del_req = urllib.request.Request(f'{url}/collections/{col}/points/delete', data=del_body, headers={'Content-Type': 'application/json'}, method='POST')
+                urllib.request.urlopen(del_req)
+                print(f'  {col}: purged {len(ids_to_delete)} points')
+                total_purged += len(ids_to_delete)
+        else:
+            print(f'  {col}: no stale points')
+    except Exception as e:
+        print(f'  {col}: error - {e}')
+
+print(f'Total purged: {total_purged}')
+" 2>&1)
+    echo "$PURGE_RESULT"
+else
+    skip "Qdrant purge: python3 not found"
+fi
+
+# 7. Qdrant Backup
 log "🗄️  Qdrant Backup"
 SNAP_DIR="$PROJECT_ROOT/src/shared/qdrant/snapshots"
 mkdir -p "$SNAP_DIR"

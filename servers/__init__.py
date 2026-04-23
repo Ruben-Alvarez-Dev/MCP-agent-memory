@@ -1,1 +1,2 @@
-# MCP Memory Server - all modules
+"""MCP Agent Memory Server."""
+__version__ = "1.1.1"

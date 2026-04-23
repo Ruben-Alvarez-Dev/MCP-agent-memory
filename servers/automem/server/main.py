@@ -16,7 +16,7 @@ load_env()
 from shared.config import Config
 from shared.qdrant_client import QdrantClient
 from shared.models import HeartbeatStatus, MemoryItem, MemoryLayer, MemoryScope, MemoryType, RawEvent, RawEventType
-from shared.embedding import async_embed, bm25_tokenize
+from shared.embedding import async_embed, safe_embed, bm25_tokenize
 from shared.sanitize import validate_memorize, validate_ingest_event
 from shared.result_models import MemorizeResult, IngestResult, HeartbeatResult, AutoMemStatusResult
 
@@ -29,11 +29,24 @@ STAGING_BUFFER = Path(config.staging_buffer_path) if config.staging_buffer_path 
 mcp = FastMCP("automem")
 
 
-async def _store_memory(item: MemoryItem) -> None:
-    await qdrant.ensure_collection()
-    vector = item.embedding if item.embedding else await async_embed(item.content)
-    sparse = bm25_tokenize(item.content)
-    await qdrant.upsert(item.memory_id, vector, item.model_dump(mode="json"), sparse=sparse)
+async def _store_memory(item: MemoryItem) -> bool:
+    """Store memory. Returns True if stored, False if failed. Falls back to JSONL."""
+    import logging
+    _log = logging.getLogger(__name__)
+    try:
+        await qdrant.ensure_collection()
+        vector = item.embedding if item.embedding else await safe_embed(item.content)
+        sparse = bm25_tokenize(item.content)
+        await qdrant.upsert(item.memory_id, vector, item.model_dump(mode="json"), sparse=sparse)
+        return True
+    except Exception as e:
+        _log.error("Failed to store memory %s: %s", item.memory_id, e)
+        # Fallback: write to JSONL so data is never lost
+        _append_raw_jsonl(RawEvent(
+            type=RawEventType.SYSTEM, source="automem_fallback",
+            attributes={"error": str(e), "memory_id": item.memory_id, "content": item.content[:500]},
+        ))
+        return False
 
 
 def _append_raw_jsonl(event: RawEvent) -> None:
@@ -94,7 +107,7 @@ async def status() -> AutoMemStatusResult:
     try:
         from shared.embedding import _get_llama_cmd
         llama_ok = _get_llama_cmd() is not None
-    except Exception:
+    except (ImportError, OSError):
         llama_ok = False
     raw_events = sum(1 for _ in open(JSONL_PATH)) if Path(JSONL_PATH).exists() else 0
     memory_count = await qdrant.count() if qdrant_ok else 0

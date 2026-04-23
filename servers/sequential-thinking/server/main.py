@@ -9,6 +9,7 @@ from mcp.types import ToolAnnotations
 from shared.env_loader import load_env; load_env()
 from shared.config import Config
 from shared.result_models import ThinkingResult, PlanResult, PlanUpdateResult, ReflectResult, SessionResult, SessionListResult, ChangeSetResult, SequentialThinkingStatusResult
+from shared.sanitize import sanitize_text, sanitize_thread_id, validate_json_field, validate_propose_change
 
 config = Config.from_env()
 THOUGHTS_PATH = Path(config.thoughts_path) if config.thoughts_path else Path("")
@@ -31,7 +32,9 @@ def _staging(cid):
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False))
 async def sequential_thinking(problem: str, context: str = "", max_steps: int = 10, thinking_style: str = "analytical", session_id: str = "") -> ThinkingResult:
     """Step-by-step reasoning chain for complex problems."""
-    sid = session_id or f"think_{uuid.uuid4().hex[:8]}"
+    problem = sanitize_text(problem, max_length=500, field="problem")
+    context = sanitize_text(context, max_length=2000, field="context") if context else ""
+    sid = sanitize_thread_id(session_id) if session_id else f"think_{uuid.uuid4().hex[:8]}"
     for i in range(min(max_steps, 5)):
         _save(sid, i+1, {"step":i+1,"problem":problem,"thought":f"Step {i+1}: {problem[:100]}","style":thinking_style,"timestamp":datetime.now(timezone.utc).isoformat()})
     return ThinkingResult(session_id=sid, steps=min(max_steps,5), summary=f"Completed {min(max_steps,5)} thinking steps")
@@ -39,6 +42,8 @@ async def sequential_thinking(problem: str, context: str = "", max_steps: int = 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False))
 async def record_thought(session_id: str, thought: str, step: int = 0, confidence: float = 0.5) -> ThinkingResult:
     """Record a single thought step."""
+    session_id = sanitize_thread_id(session_id)
+    thought = sanitize_text(thought, field="thought")
     existing = _load(session_id)
     ns = step or len(existing) + 1
     _save(session_id, ns, {"step":ns,"thought":thought,"confidence":confidence,"timestamp":datetime.now(timezone.utc).isoformat()})
@@ -47,9 +52,10 @@ async def record_thought(session_id: str, thought: str, step: int = 0, confidenc
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False))
 async def create_plan(title: str, steps_json: str, context: str = "", session_id: str = "") -> PlanResult:
     """Create an execution plan with steps."""
-    sid = session_id or f"plan_{uuid.uuid4().hex[:8]}"
-    try: steps = json.loads(steps_json) if isinstance(steps_json, str) else steps_json
-    except json.JSONDecodeError: steps = [{"description":steps_json}]
+    title = sanitize_text(title, max_length=500, field="title")
+    context = sanitize_text(context, max_length=2000, field="context") if context else ""
+    steps = validate_json_field(steps_json, field="steps_json")
+    sid = sanitize_thread_id(session_id) if session_id else f"plan_{uuid.uuid4().hex[:8]}"
     plan = {"plan_id":sid,"title":title,"context":context,"steps":steps,"status":"created","created_at":datetime.now(timezone.utc).isoformat()}
     d = THOUGHTS_PATH / "plans"; d.mkdir(parents=True, exist_ok=True)
     (d / f"{sid}_plan.json").write_text(json.dumps(plan, indent=2))
@@ -58,6 +64,8 @@ async def create_plan(title: str, steps_json: str, context: str = "", session_id
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False))
 async def update_plan_step(plan_id: str, step_index: int, status: str = "completed", notes: str = "") -> PlanUpdateResult:
     """Update a plan step status."""
+    plan_id = sanitize_thread_id(plan_id)
+    notes = sanitize_text(notes, max_length=2000, field="notes") if notes else ""
     pf = THOUGHTS_PATH / "plans" / f"{plan_id}_plan.json"
     if not pf.exists(): return PlanUpdateResult(status="plan_not_found")
     plan = json.loads(pf.read_text())
@@ -71,12 +79,14 @@ async def update_plan_step(plan_id: str, step_index: int, status: str = "complet
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def reflect(session_id: str, focus: str = "quality") -> ReflectResult:
     """Reflect on reasoning quality."""
+    session_id = sanitize_thread_id(session_id)
     thoughts = _load(session_id)
     return ReflectResult(status="reflected", session_id=session_id, steps=len(thoughts), summary=f"Session {session_id}: {len(thoughts)} steps")
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def get_thinking_session(session_id: str) -> SessionResult:
     """Retrieve a thinking session."""
+    session_id = sanitize_thread_id(session_id)
     thoughts = _load(session_id)
     return SessionResult(session_id=session_id, steps=len(thoughts), thoughts=thoughts)
 
@@ -90,9 +100,9 @@ async def list_thinking_sessions() -> SessionListResult:
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False))
 async def propose_change_set(session_id: str, title: str, changes_json: str = "[]") -> ChangeSetResult:
     """Propose a code change set."""
+    clean = validate_propose_change(session_id, title, changes_json)
     cid = f"cs_{uuid.uuid4().hex[:8]}"
-    try: changes = json.loads(changes_json)
-    except json.JSONDecodeError: changes = []
+    changes = clean["changes"]
     cs = {"change_set_id":cid,"session_id":session_id,"title":title,"changes":changes,"status":"proposed","created_at":datetime.now(timezone.utc).isoformat()}
     _staging(cid).write_text(json.dumps(cs, indent=2))
     return ChangeSetResult(status="proposed", change_set_id=cid, changes=len(changes))
@@ -100,6 +110,7 @@ async def propose_change_set(session_id: str, title: str, changes_json: str = "[
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False))
 async def apply_sandbox(change_set_id: str, dry_run: bool = True) -> dict:
     """Apply changes in sandbox mode."""
+    change_set_id = sanitize_thread_id(change_set_id)
     p = _staging(change_set_id)
     if not p.exists(): return {"status":"not_found"}
     cs = json.loads(p.read_text())

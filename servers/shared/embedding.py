@@ -28,7 +28,10 @@ Usage:
 
 from __future__ import annotations
 
+import logging
 import os
+
+logger = logging.getLogger(__name__)
 import re
 import subprocess
 import sys
@@ -493,16 +496,37 @@ def _get_default_backend() -> EmbeddingBackend:
 # ── Public API (unchanged for backwards compatibility) ─────────────
 
 def get_embedding(text: str) -> list[float]:
-    """Get embedding vector using the configured backend (cached via lru_cache)."""
+    """Get embedding vector using the configured backend (cached via lru_cache + SQLite)."""
     global _cache_hits
     _get_default_backend()  # ensure initialized
+
+    # 1. Check in-memory LRU cache
     cache_key = text if len(text) <= 200 else text[:200]
     if _backend_cache_fn is not None:
         result = _backend_cache_fn(cache_key)
         if result and isinstance(result, tuple):
             _cache_hits += 1
-            return list(result)
-    return _default_backend.embed(text)
+            vec = list(result)
+            # Also populate persistent cache for restart survival
+            from shared.embedding_cache import cache_set
+            cache_set(text, vec)
+            return vec
+
+    # 2. Check persistent SQLite cache
+    from shared.embedding_cache import cache_get, cache_set
+    cached = cache_get(text)
+    if cached and len(cached) > 0:
+        _cache_hits += 1
+        return cached
+
+    # 3. Compute embedding
+    vec = _default_backend.embed(text)
+
+    # 4. Store to persistent cache
+    if vec and len(vec) > 0:
+        cache_set(text, vec)
+
+    return vec
 
 
 def get_embeddings(texts: list[str]) -> list[list[float]]:
@@ -551,6 +575,49 @@ async def async_embed(text: str) -> list[float]:
     """
     import asyncio
     return await asyncio.to_thread(get_embedding, text)
+
+
+async def safe_embed(text: str) -> list[float]:
+    """Embed with fallback to zero-vector and warning log.
+
+    Never returns empty list. If embedding fails, returns a zero-vector
+    of the configured dimension and logs a warning.
+    Use this as the safe replacement for local _embed() wrappers.
+    """
+    import asyncio as _aio
+    try:
+        vec = await async_embed(text)
+        if vec and len(vec) > 0:
+            return vec
+    except Exception as e:
+        logger.warning("safe_embed: embedding failed, using zero-vector: %s", e)
+    dim = int(os.getenv("EMBEDDING_DIM", "1024"))
+    logger.warning("safe_embed: returning zero-vector of dim=%d for text='%s'", dim, text[:80])
+    return [0.0] * dim
+
+
+async def async_embed_batch(texts: list[str]) -> list[list[float]]:
+    """Embed multiple texts efficiently. Falls back to individual embeds if batch fails.
+
+    Returns a list of vectors, one per input text.
+    """
+    import asyncio as _aio
+    if not texts:
+        return []
+    # Try individual embeddings in parallel via thread pool
+    results = await asyncio.gather(
+        *[safe_embed(t) for t in texts],
+        return_exceptions=True,
+    )
+    output = []
+    for i, r in enumerate(results):
+        if isinstance(r, Exception):
+            logger.warning("async_embed_batch: item %d failed: %s", i, r)
+            dim = int(os.getenv("EMBEDDING_DIM", "1024"))
+            output.append([0.0] * dim)
+        else:
+            output.append(r)
+    return output
 
 
 # ── Internal helpers ──────────────────────────────────────────────

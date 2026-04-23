@@ -8,7 +8,7 @@ from mcp.types import ToolAnnotations
 from shared.env_loader import load_env; load_env()
 from shared.config import Config
 from shared.qdrant_client import QdrantClient
-from shared.embedding import async_embed, bm25_tokenize
+from shared.embedding import async_embed, safe_embed, bm25_tokenize
 from shared.sanitize import validate_add_memory
 from shared.result_models import AddMemoryResult, SearchResult, LayerResult as Mem0ListResult, DismissResult as DeleteResult, Mem0StatusResult
 
@@ -17,17 +17,14 @@ qdrant = QdrantClient(config.qdrant_url, "mem0_memories", config.embedding_dim)
 DEFAULT_USER = "default"
 mcp = FastMCP("mem0")
 
-async def _embed(t):
-    try: return await async_embed(t)
-    except Exception: return []
-
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False))
 async def add_memory(content: str, user_id: str = DEFAULT_USER, metadata: str = "") -> AddMemoryResult:
     """Add a semantic memory for a user."""
     clean = validate_add_memory(content, user_id)
-    vector = await _embed(clean["content"])
+    vector = await safe_embed(clean["content"])
     sparse = bm25_tokenize(clean["content"])
-    mid = f"mem0_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f')}"
+    import uuid as _uuid
+    mid = str(_uuid.uuid4())
     meta = json.loads(metadata) if metadata.strip().startswith("{") else {}
     await qdrant.ensure_collection(sparse=True)
     await qdrant.upsert(mid, vector, {"memory_id":mid,"user_id":clean["user_id"],"content":clean["content"],"metadata":meta,"created_at":datetime.now(timezone.utc).isoformat()}, sparse=sparse)
@@ -36,7 +33,7 @@ async def add_memory(content: str, user_id: str = DEFAULT_USER, metadata: str = 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def search_memory(query: str, user_id: str = DEFAULT_USER, limit: int = 5) -> SearchResult:
     """Search semantic memories for a user."""
-    vector = await _embed(query)
+    vector = await safe_embed(query)
     results = await qdrant.search(vector, limit=limit)
     filtered = [r.get("payload",{}) for r in results if r.get("payload",{}).get("user_id") == user_id]
     return SearchResult(count=len(filtered), results=filtered)

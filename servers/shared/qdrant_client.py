@@ -14,6 +14,7 @@ Usage:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from typing import Any, Optional
@@ -41,6 +42,38 @@ class QdrantClient:
         self.collection = collection
         self.embedding_dim = embedding_dim
         self._timeout = timeout
+        self._client: httpx.AsyncClient | None = None
+
+    async def _get_client(self) -> httpx.AsyncClient:
+        """Get or create a persistent httpx client with connection pooling."""
+        if self._client is None or self._client.is_closed:
+            self._client = httpx.AsyncClient(
+                timeout=self._timeout,
+                limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
+            )
+        return self._client
+
+    async def close(self):
+        """Close the persistent client."""
+        if self._client and not self._client.is_closed:
+            await self._client.aclose()
+            self._client = None
+
+    async def _retry(self, fn, max_retries: int = 3, base_delay: float = 0.5):
+        """Execute fn with exponential backoff on transient errors."""
+        last_exc = None
+        for attempt in range(max_retries):
+            try:
+                return await fn()
+            except (httpx.ConnectError, httpx.TimeoutException) as e:
+                last_exc = e
+                delay = base_delay * (2 ** attempt)
+                logger.warning(
+                    "Attempt %d/%d failed for %s: %s, retrying in %.1fs",
+                    attempt + 1, max_retries, self.collection, e, delay,
+                )
+                await asyncio.sleep(delay)
+        raise last_exc
 
     def with_collection(self, collection: str) -> QdrantClient:
         """Create a new client targeting a different collection."""
@@ -61,7 +94,8 @@ class QdrantClient:
 
     async def ensure_collection(self, sparse: bool = True) -> None:
         """Create collection with dense + optional sparse vectors if not exists."""
-        async with httpx.AsyncClient(timeout=self._timeout) as client:
+        async def _do():
+            client = await self._get_client()
             resp = await client.get(f"{self.url}/collections")
             resp.raise_for_status()
             existing = [
@@ -89,6 +123,7 @@ class QdrantClient:
                     self.embedding_dim,
                     sparse,
                 )
+        await self._retry(_do)
 
     async def collection_info(self) -> Optional[dict]:
         """Get collection metadata, or None if not found."""
@@ -121,6 +156,12 @@ class QdrantClient:
         wait: bool = True,
     ) -> None:
         """Insert or update a single point."""
+        if not vector or len(vector) != self.embedding_dim:
+            raise ValueError(
+                f"Invalid vector for point {point_id}: "
+                f"got {len(vector) if vector else 0} dims, expected {self.embedding_dim}"
+            )
+        payload["schema_version"] = payload.get("schema_version", "1.0")
         point: dict[str, Any] = {
             "id": point_id,
             "vector": vector,
@@ -129,12 +170,14 @@ class QdrantClient:
         if sparse:
             point["sparse_vectors"] = {"text": sparse}
 
-        async with httpx.AsyncClient(timeout=self._timeout) as client:
+        async def _do():
+            client = await self._get_client()
             await client.put(
                 f"{self.url}/collections/{self.collection}/points"
                 f"{'?wait=true' if wait else ''}",
                 json={"points": [point]},
             )
+        await self._retry(_do)
 
     async def upsert_batch(
         self,
@@ -142,12 +185,23 @@ class QdrantClient:
         wait: bool = True,
     ) -> None:
         """Insert or update multiple points."""
-        async with httpx.AsyncClient(timeout=self._timeout) as client:
+        for p in points:
+            v = p.get("vector", [])
+            if not v or len(v) != self.embedding_dim:
+                raise ValueError(
+                    f"Invalid vector for point {p.get('id', '?')}: "
+                    f"got {len(v) if v else 0} dims, expected {self.embedding_dim}"
+                )
+            p.setdefault("payload", {})["schema_version"] = p["payload"].get("schema_version", "1.0")
+
+        async def _do():
+            client = await self._get_client()
             await client.put(
                 f"{self.url}/collections/{self.collection}/points"
                 f"{'?wait=true' if wait else ''}",
                 json={"points": points},
             )
+        await self._retry(_do)
 
     async def get(self, point_id: str) -> Optional[dict]:
         """Get a point by ID, or None if not found."""
@@ -181,18 +235,20 @@ class QdrantClient:
         if filter:
             body["filter"] = filter
 
+        async def _do():
+            client = await self._get_client()
+            resp = await client.post(
+                f"{self.url}/collections/{self.collection}/points/search",
+                json=body,
+            )
+            if resp.status_code != 200:
+                return []
+            result = resp.json().get("result", [])
+            return result if isinstance(result, list) else result.get("result", [])
         try:
-            async with httpx.AsyncClient(timeout=self._timeout) as client:
-                resp = await client.post(
-                    f"{self.url}/collections/{self.collection}/points/search",
-                    json=body,
-                )
-                if resp.status_code != 200:
-                    return []
-                result = resp.json().get("result", [])
-                return result if isinstance(result, list) else result.get("result", [])
+            return await self._retry(_do)
         except Exception as e:
-            logger.warning("Qdrant search failed: %s", e)
+            logger.warning("Qdrant search failed after retries: %s", e)
             return []
 
     async def scroll(
@@ -209,17 +265,19 @@ class QdrantClient:
         if filter:
             body["filter"] = filter
 
+        async def _do():
+            client = await self._get_client()
+            resp = await client.post(
+                f"{self.url}/collections/{self.collection}/points/scroll",
+                json=body,
+            )
+            if resp.status_code != 200:
+                return []
+            result = resp.json().get("result", [])
+            points = result.get("points", []) if isinstance(result, dict) else result
+            return [p.get("payload", {}) for p in points if p.get("payload")]
         try:
-            async with httpx.AsyncClient(timeout=self._timeout) as client:
-                resp = await client.post(
-                    f"{self.url}/collections/{self.collection}/points/scroll",
-                    json=body,
-                )
-                if resp.status_code != 200:
-                    return []
-                result = resp.json().get("result", [])
-                points = result.get("points", []) if isinstance(result, dict) else result
-                return [p.get("payload", {}) for p in points if p.get("payload")]
+            return await self._retry(_do)
         except Exception as e:
-            logger.warning("Qdrant scroll failed: %s", e)
+            logger.warning("Qdrant scroll failed after retries: %s", e)
             return []

@@ -115,13 +115,40 @@ class Config:
         """Validate configuration. Returns list of error messages."""
         errors: list[str] = []
 
+        # URLs
         if not self.qdrant_url:
             errors.append("QDRANT_URL is empty")
+        elif not self.qdrant_url.startswith(("http://", "https://")):
+            errors.append(f"QDRANT_URL must be http(s) URL, got {self.qdrant_url}")
+
+        # Embedding backend
+        valid_embed_backends = {"llama_cpp", "llama_server", "http", "noop"}
+        if self.embedding_backend not in valid_embed_backends:
+            errors.append(f"EMBEDDING_BACKEND must be one of {valid_embed_backends}, got '{self.embedding_backend}'")
+
+        # LLM backend
+        valid_llm_backends = {"ollama", "llama_cpp", "lmstudio"}
+        if self.llm_backend not in valid_llm_backends:
+            errors.append(f"LLM_BACKEND must be one of {valid_llm_backends}, got '{self.llm_backend}'")
+
+        # Embedding dimension
+        standard_dims = {256, 384, 512, 768, 1024, 1536}
         if self.embedding_dim <= 0:
             errors.append(f"EMBEDDING_DIM must be > 0, got {self.embedding_dim}")
+        elif self.embedding_dim not in standard_dims:
+            errors.append(f"EMBEDDING_DIM unusual value: {self.embedding_dim} (standard: {sorted(standard_dims)})")
+
+        # Cache
         if self.embedding_cache_size < 0:
             errors.append(f"EMBEDDING_CACHE_SIZE must be >= 0, got {self.embedding_cache_size}")
-        if self.vk_min_score < 0 or self.vk_min_score > 1:
+
+        # vk-cache
+        if not (0 <= self.vk_min_score <= 1):
             errors.append(f"VK_MIN_SCORE must be 0-1, got {self.vk_min_score}")
+
+        # Model path for llama_server backend
+        if self.embedding_backend == "llama_server" and self.embedding_model:
+            if not Path(self.embedding_model).exists():
+                errors.append(f"EMBEDDING_MODEL not found: {self.embedding_model}")
 
         return errors

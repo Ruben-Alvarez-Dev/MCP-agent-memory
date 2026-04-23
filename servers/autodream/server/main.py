@@ -15,7 +15,7 @@ from shared.config import Config
 from shared.qdrant_client import QdrantClient
 from shared.models import MemoryItem, MemoryLayer, MemoryScope, MemoryType
 from shared.llm import get_llm
-from shared.embedding import async_embed
+from shared.embedding import async_embed, safe_embed
 from shared.result_models import HeartbeatResult, ConsolidateResult, DreamResult, LayerResult, AutoDreamStatusResult
 
 config = Config.from_env()
@@ -35,12 +35,6 @@ def _load_state() -> dict:
 def _save_state(state: dict) -> None:
     _state_path.write_text(json.dumps(state, indent=2))
 
-async def _embed(text: str) -> list[float]:
-    try:
-        return await async_embed(text)
-    except Exception:
-        return []
-
 async def _summarize(texts: list[str], prompt: str = "") -> str:
     content = "\n---\n".join(texts[:20])
     if not prompt:
@@ -58,6 +52,7 @@ async def _summarize(texts: list[str], prompt: str = "") -> str:
 async def _promote_l1_l2(state: dict) -> str | None:
     if state["turn_count"] - state.get("last_promote_l1_l2", 0) < config.dream_promote_l1:
         return None
+    await qdrant.ensure_collection(sparse=False)
     working = await qdrant.scroll({"must": [{"key": "layer", "match": {"value": 1}}]}, limit=100)
     if not working:
         return None
@@ -72,7 +67,7 @@ async def _promote_l1_l2(state: dict) -> str | None:
         combined = "\n".join(f"- {m['content']}" for m in items[:10])
         avg_imp = sum(m.get("importance", 0) for m in items) / len(items)
         ep = MemoryItem(layer=MemoryLayer.EPISODIC, scope_type=items[0].get("scope_type", MemoryScope.AGENT), scope_id=items[0].get("scope_id", "system"), type=MemoryType.EPISODE, content=f"Episode ({len(items)} events):\n{combined}", importance=avg_imp, confidence=0.7)
-        vector = await _embed(ep.content) or [0.0] * config.embedding_dim
+        vector = await safe_embed(ep.content)
         await qdrant.upsert(ep.memory_id, vector, ep.model_dump(mode="json"))
         episodes.append(ep.memory_id)
     state["last_promote_l1_l2"] = state.get("turn_count", 0)
@@ -81,12 +76,13 @@ async def _promote_l1_l2(state: dict) -> str | None:
 async def _promote_l2_l3(state: dict, now: float) -> str | None:
     if now - state.get("last_promote_l2_l3", 0) < config.dream_promote_l2:
         return None
+    await qdrant.ensure_collection(sparse=False)
     episodes = await qdrant.scroll({"must": [{"key": "layer", "match": {"value": 2}}]}, limit=50)
     if not episodes:
         return None
     summary = await _summarize([e.get("content", "") for e in episodes], "Extract key decisions, entities, and reusable patterns.\n\n")
     sem = MemoryItem(layer=MemoryLayer.SEMANTIC, scope_type=MemoryScope.AGENT, scope_id="consolidated", type=MemoryType.DECISION, content=f"Consolidated from {len(episodes)} episodes:\n\n{summary}", importance=0.8, confidence=0.75)
-    vector = await _embed(summary)
+    vector = await safe_embed(summary)
     await qdrant.upsert(sem.memory_id, vector, sem.model_dump(mode="json"))
     state["last_promote_l2_l3"] = now
     state["total_consolidated"] = state.get("total_consolidated", 0) + 1
@@ -95,12 +91,13 @@ async def _promote_l2_l3(state: dict, now: float) -> str | None:
 async def _promote_l3_l4(state: dict, now: float) -> str | None:
     if now - state.get("last_promote_l3_l4", 0) < config.dream_promote_l3:
         return None
+    await qdrant.ensure_collection(sparse=False)
     semantic = await qdrant.scroll({"must": [{"key": "layer", "match": {"value": 3}}]}, limit=30)
     if not semantic:
         return None
     narrative = await _summarize([s.get("content", "") for s in semantic], "Write a coherent narrative from these memory fragments.\n\n")
     item = MemoryItem(layer=MemoryLayer.CONSOLIDATED, scope_type=MemoryScope.AGENT, scope_id="narrative", type=MemoryType.NARRATIVE, content=narrative, importance=0.9, confidence=0.6)
-    vector = await _embed(narrative)
+    vector = await safe_embed(narrative)
     await qdrant.upsert(item.memory_id, vector, item.model_dump(mode="json"))
     state["last_promote_l3_l4"] = now
     state["total_consolidated"] = state.get("total_consolidated", 0) + 1
@@ -156,7 +153,7 @@ async def dream() -> DreamResult:
         return DreamResult(status="No memories to dream about", total_dreams=state.get("total_dreams", 0))
     dream_text = await _summarize([m.get("content", "") for m in all_mem[:15]], "You are dreaming. Find deep patterns and insights.\n\n")
     item = MemoryItem(layer=MemoryLayer.CONSOLIDATED, scope_type=MemoryScope.AGENT, scope_id="dream", type=MemoryType.DREAM, content=f"Dream:\n\n{dream_text}", importance=0.5, confidence=0.4)
-    vector = await _embed(dream_text)
+    vector = await safe_embed(dream_text)
     await qdrant.upsert(item.memory_id, vector, item.model_dump(mode="json"))
     state["last_dream"] = now
     state["total_dreams"] = state.get("total_dreams", 0) + 1

@@ -8,7 +8,7 @@ from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 from shared.env_loader import load_env; load_env()
 from shared.config import Config
-from shared.sanitize import validate_save_decision, validate_vault_write, sanitize_filename
+from shared.sanitize import validate_save_decision, validate_vault_write, sanitize_filename, sanitize_text, sanitize_thread_id, validate_json_field
 from shared.result_models import SaveDecisionResult, DecisionListResult, VaultWriteResult, VaultIntegrityResult, VaultNotesResult, ModelPackResult, ModelPackListResult, EngramStatusResult
 
 config = Config.from_env()
@@ -45,14 +45,17 @@ async def search_decisions(query: str, category: str = "", limit: int = 10) -> D
         try:
             if query.lower() in f.read_text(encoding="utf-8").lower():
                 results.append({"file_path":str(f),"filename":f.name})
-        except Exception: pass
+        except OSError: pass
         if len(results) >= limit: break
     return DecisionListResult(count=len(results), decisions=results)
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def get_decision(file_path: str) -> dict:
     """Get a specific decision by file path."""
-    p = Path(file_path)
+    p = Path(file_path).resolve()
+    engram_root = ENGRAM_PATH.resolve()
+    if not str(p).startswith(str(engram_root)):
+        return {"status": "forbidden", "error": "Path outside engram root"}
     return _read(p) if p.exists() else {"status":"not_found"}
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
@@ -65,9 +68,14 @@ async def list_decisions(category: str = "", scope: str = "", limit: int = 20) -
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
 async def delete_decision(file_path: str) -> dict:
     """Delete a decision file."""
-    p = Path(file_path)
-    if p.exists() and str(p).startswith(str(ENGRAM_PATH)): p.unlink(); return {"status":"deleted"}
-    return {"status":"not_found"}
+    p = Path(file_path).resolve()
+    engram_root = ENGRAM_PATH.resolve()
+    if not str(p).startswith(str(engram_root)):
+        return {"status": "forbidden", "error": "Path outside engram root"}
+    if p.exists():
+        p.unlink()
+        return {"status": "deleted"}
+    return {"status": "not_found"}
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False))
 async def vault_write(folder: str, filename: str, content: str, tags: str = "") -> VaultWriteResult:
@@ -109,9 +117,10 @@ async def get_model_pack(name: str = "default") -> ModelPackResult:
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False))
 async def set_model_pack(name: str, content: str) -> ModelPackResult:
+    safe_name = sanitize_filename(name, field="model_pack_name")
     d = ENGRAM_PATH / "model-packs"; d.mkdir(parents=True, exist_ok=True)
-    (d / f"{name}.yaml").write_text(content)
-    return ModelPackResult(name=name, status="set")
+    (d / f"{safe_name}.yaml").write_text(content, encoding="utf-8")
+    return ModelPackResult(name=safe_name, status="set")
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def list_model_packs() -> ModelPackListResult:

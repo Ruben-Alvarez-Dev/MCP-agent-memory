@@ -17,6 +17,10 @@ sys.path.insert(0, str(BASE_DIR))
 
 from shared.env_loader import load_env
 load_env()
+from shared.logging_config import setup_logging
+setup_logging()
+import logging
+logger = logging.getLogger("agent-memory.unified")
 from shared.config import Config
 from shared.qdrant_client import QdrantClient
 from mcp.server.fastmcp import FastMCP
@@ -78,7 +82,112 @@ STATUS_REPORT = (
 )
 
 
+async def _initialize() -> None:
+    """Auto-initialize all collections and directories on startup."""
+    import asyncio
+    import logging
+    logger = logging.getLogger("mcp-agent-memory.init")
+
+    # 1. Create all data directories
+    dirs = [
+        config.data_dir,
+        config.engram_path,
+        config.dream_path,
+        config.thoughts_path,
+        config.heartbeats_path,
+        config.reminders_path,
+        config.staging_buffer_path,
+        config.vault_path,
+    ]
+    for d in dirs:
+        if d:
+            Path(d).mkdir(parents=True, exist_ok=True)
+
+    # 2. Ensure all Qdrant collections exist
+    collections = {
+        "automem": (config.qdrant_url, config.embedding_dim),
+        "conversations": (config.qdrant_url, config.embedding_dim),
+        "mem0_memories": (config.qdrant_url, config.embedding_dim),
+    }
+    for coll_name, (url, dim) in collections.items():
+        try:
+            client = QdrantClient(url, coll_name, dim)
+            await client.ensure_collection(sparse=True)
+            logger.info(f"Collection '{coll_name}' ready")
+        except Exception as e:
+            logger.warning(f"Collection '{coll_name}' init failed: {e}")
+
+    # 3. Create engram subdirs
+    for sub in ["general", "project", "personal", "model-packs"]:
+        p = Path(config.engram_path) / sub if config.engram_path else None
+        if p:
+            p.mkdir(parents=True, exist_ok=True)
+
+    # 4. Create vault folders
+    for folder in ["Inbox", "Decisiones", "Conocimiento", "Episodios", "Entidades", "Notes"]:
+        p = Path(config.vault_path) / folder if config.vault_path else None
+        if p:
+            p.mkdir(parents=True, exist_ok=True)
+
+
+@mcp.tool()
+async def health_check() -> dict:
+    """Check health of all memory subsystems."""
+    import asyncio
+    checks = {}
+
+    # Qdrant
+    try:
+        checks["qdrant"] = await qdrant.health()
+    except Exception as e:
+        checks["qdrant"] = f"error: {e}"
+
+    # Embedding
+    try:
+        from shared.embedding import get_embedding
+        vec = get_embedding("health check")
+        checks["embedding"] = len(vec) == config.embedding_dim
+    except Exception as e:
+        checks["embedding"] = f"error: {e}"
+
+    # Collection counts
+    for coll in ["automem", "conversations", "mem0_memories"]:
+        try:
+            c = QdrantClient(config.qdrant_url, coll, config.embedding_dim)
+            checks[f"{coll}_count"] = await c.count()
+        except Exception:
+            checks[f"{coll}_count"] = -1
+
+    # Disk usage
+    import os
+    data_path = config.data_dir
+    if data_path and os.path.exists(data_path):
+        total = sum(
+            os.path.getsize(os.path.join(dp, f))
+            for dp, _, fns in os.walk(data_path)
+            for f in fns
+        )
+        checks["disk_mb"] = round(total / 1024 / 1024, 1)
+
+    checks["modules_loaded"] = len(_loaded)
+    checks["modules_failed"] = len(_failed)
+    checks["tools_total"] = len(mcp._tool_manager._tools)
+    checks["status"] = "ok" if not _failed else "degraded"
+    return checks
+
+
 def main() -> None:
+    import asyncio
+    import logging
+    from shared.logging_config import setup_logging
+    setup_logging()
+    logger = logging.getLogger("agent-memory")
+    try:
+        asyncio.run(_initialize())
+        logger.info("Initialization complete")
+    except Exception as e:
+        logger.warning(f"Initialization partial: %s", e)
+    logger.info("Starting MCP server on stdio")
     mcp.run(transport="stdio")
 
 

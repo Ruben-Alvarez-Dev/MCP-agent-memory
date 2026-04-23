@@ -124,7 +124,7 @@ def prune_content(
         pruned = _strip_python_comments(text)
         try:
             pruned = _collapse_python_bodies(pruned)
-        except:
+        except Exception:
             pass
     else:
         pruned = _strip_generic_comments(text)
