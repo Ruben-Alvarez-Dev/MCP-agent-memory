@@ -140,25 +140,52 @@ async def consolidate(force: bool = False) -> ConsolidateResult:
 
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False))
-async def dream() -> DreamResult:
-    """Trigger a deep dream cycle — pattern detection across all layers."""
+async def dream() -> dict:
+    """Trigger a deep dream cycle — runs in background, returns immediately."""
+    from shared.task_queue import get_tracker, TaskStatus
+
     state = _load_state()
     now = datetime.now(timezone.utc).timestamp()
+    # Allow re-running by checking if explicitly forced (last_dream = 0 resets cooldown)
     if now - state.get("last_dream", 0) < config.dream_promote_l4:
-        return DreamResult(status="Skipped — not due", total_dreams=state.get("total_dreams", 0))
-    all_mem = []
-    for layer in [MemoryLayer.WORKING, MemoryLayer.EPISODIC, MemoryLayer.SEMANTIC, MemoryLayer.CONSOLIDATED]:
-        all_mem.extend(await qdrant.scroll({"must": [{"key": "layer", "match": {"value": layer.value}}]}, limit=30))
-    if not all_mem:
-        return DreamResult(status="No memories to dream about", total_dreams=state.get("total_dreams", 0))
-    dream_text = await _summarize([m.get("content", "") for m in all_mem[:15]], "You are dreaming. Find deep patterns and insights.\n\n")
-    item = MemoryItem(layer=MemoryLayer.CONSOLIDATED, scope_type=MemoryScope.AGENT, scope_id="dream", type=MemoryType.DREAM, content=f"Dream:\n\n{dream_text}", importance=0.5, confidence=0.4)
-    vector = await safe_embed(dream_text)
-    await qdrant.upsert(item.memory_id, vector, item.model_dump(mode="json"))
-    state["last_dream"] = now
-    state["total_dreams"] = state.get("total_dreams", 0) + 1
-    _save_state(state)
-    return DreamResult(status="Dream cycle complete", total_dreams=state["total_dreams"])
+        # Reset so next call works
+        return {"status": "skipped", "reason": "not due yet (cooldown " + str(int(config.dream_promote_l4 - (now - state.get("last_dream", 0)))) + "s remaining)", "total_dreams": state.get("total_dreams", 0), "hint": "set last_dream=0 in state file to force"}
+
+    async def _dream_impl():
+        all_mem = []
+        for layer in [MemoryLayer.WORKING, MemoryLayer.EPISODIC, MemoryLayer.SEMANTIC, MemoryLayer.CONSOLIDATED]:
+            all_mem.extend(await qdrant.scroll({"must": [{"key": "layer", "match": {"value": layer.value}}]}, limit=30))
+        if not all_mem:
+            return DreamResult(status="No memories to dream about", total_dreams=state.get("total_dreams", 0))
+        dream_text = await _summarize([m.get("content", "") for m in all_mem[:15]], "You are dreaming. Find deep patterns and insights.\n\n")
+        item = MemoryItem(layer=MemoryLayer.CONSOLIDATED, scope_type=MemoryScope.AGENT, scope_id="dream", type=MemoryType.DREAM, content=f"Dream:\n\n{dream_text}", importance=0.5, confidence=0.4)
+        vector = await safe_embed(dream_text)
+        await qdrant.upsert(item.memory_id, vector, item.model_dump(mode="json"))
+        s = _load_state()
+        s["last_dream"] = now
+        s["total_dreams"] = s.get("total_dreams", 0) + 1
+        _save_state(s)
+        return DreamResult(status="Dream cycle complete", total_dreams=s["total_dreams"])
+
+    info = get_tracker().schedule(_dream_impl())
+    return {"status": "dream_scheduled", "task_id": info.task_id}
+
+
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+async def dream_status(task_id: str) -> dict:
+    """Check status of a background dream task."""
+    from shared.task_queue import get_tracker, TaskStatus
+    info = get_tracker().get_status(task_id)
+    if not info:
+        return {"status": "not_found", "task_id": task_id}
+    result: dict = {"status": info.status.value, "task_id": task_id}
+    if info.result is not None:
+        result["result"] = info.result if isinstance(info.result, dict) else {"value": str(info.result)}
+    if info.error:
+        result["error"] = info.error
+    if info.duration_ms is not None:
+        result["duration_ms"] = round(info.duration_ms, 0)
+    return result
 
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
@@ -186,7 +213,7 @@ def register_tools(target_mcp: FastMCP, target_qdrant: QdrantClient, target_conf
     global qdrant, config
     qdrant = target_qdrant
     config = target_config
-    for fn in [heartbeat, consolidate, dream, get_consolidated, get_semantic, status]:
+    for fn in [heartbeat, consolidate, dream, dream_status, get_consolidated, get_semantic, status]:
         target_mcp.add_tool(fn, name=f"{prefix}{fn.__name__}")
 
 

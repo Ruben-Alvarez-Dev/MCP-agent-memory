@@ -35,10 +35,10 @@ async def get_conversation(thread_id: str) -> dict:
     return point.get("payload", {}) if point else {"status":"not_found","thread_id":thread_id}
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
-async def search_conversations(query: str, limit: int = 5) -> SearchResult:
+async def search_conversations(query: str, limit: int = 5, min_score: float = 0.3) -> SearchResult:
     """Search conversations by semantic similarity."""
     vector = await safe_embed(query)
-    results = await qdrant.search(vector, limit=limit)
+    results = await qdrant.search(vector, limit=limit, score_threshold=min_score)
     return SearchResult(count=len(results), results=[{**r.get("payload",{}), "score": round(r.get("score", 0), 4)} for r in results])
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))

@@ -31,14 +31,14 @@ async def add_memory(content: str, user_id: str = DEFAULT_USER, metadata: str = 
     return AddMemoryResult(status="added", memory_id=mid)
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
-async def search_memory(query: str, user_id: str = DEFAULT_USER, limit: int = 5) -> SearchResult:
+async def search_memory(query: str, user_id: str = DEFAULT_USER, limit: int = 5, min_score: float = 0.3) -> SearchResult:
     """Search semantic memories for a user."""
     # Validate query — reject empty/garbage input
     query = query.strip()
     if not query or len(query) < 2 or not any(c.isalnum() for c in query):
         return SearchResult(count=0, results=[])
     vector = await safe_embed(query)
-    results = await qdrant.search(vector, limit=limit)
+    results = await qdrant.search(vector, limit=limit, score_threshold=min_score)
     filtered = [{**r.get("payload",{}), "score": round(r.get("score", 0), 4)} for r in results if r.get("payload",{}).get("user_id") == user_id]
     return SearchResult(count=len(filtered), results=filtered)
 
