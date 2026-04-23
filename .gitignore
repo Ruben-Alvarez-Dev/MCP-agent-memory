@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+.qdrant-initialized
+storage/
+snapshots/
+data/
+embedding_cache.db*
+engine/bin/
+bin/qdrant
+config/.env
+*.egg-info/
+dist/
+build/
+.pytest_cache/
