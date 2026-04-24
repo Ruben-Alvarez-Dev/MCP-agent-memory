@@ -40,9 +40,13 @@ A unified MCP (Model Context Protocol) memory server that provides persistent, m
 ## Installation
 
 ```bash
-git clone https://github.com/Ruben-Alvarez-Dev/MCP-agent-memory.git ~/MCP-servers/MCP-agent-memory
-cd ~/MCP-servers/MCP-agent-memory
-bash install.sh
+curl -fsSL https://raw.githubusercontent.com/Ruben-Alvarez-Dev/MCP-agent-memory/main/install.sh | bash
+```
+
+Installs to `~/MCP-agent-memory` by default. Custom path:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Ruben-Alvarez-Dev/MCP-agent-memory/main/install.sh | bash -s -- ~/my-custom-path
 ```
 
 The installer performs 8 steps with a visual checklist:

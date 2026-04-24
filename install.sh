@@ -1,10 +1,48 @@
 #!/bin/bash
 # MCP-agent-memory — Installer
-# Run from inside the cloned repo: bash install.sh
+#
+# Usage (one-liner, no clone needed):
+#   curl -fsSL https://raw.githubusercontent.com/Ruben-Alvarez-Dev/MCP-agent-memory/main/install.sh | bash
+#   curl -fsSL ... | bash -s -- ~/my-custom-path
+#
+# Or from inside the cloned repo:
+#   bash install.sh
+#   bash install.sh ~/my-custom-path
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" 2>/dev/null && pwd)"
+INSTALL_DIR="${1:-$HOME/MCP-agent-memory}"
+
+# ── Auto-bootstrap: download source via tarball if not inside repo ──
+if [ ! -f "$SCRIPT_DIR/src/unified/server/main.py" ]; then
+    REPO_URL="https://github.com/Ruben-Alvarez-Dev/MCP-agent-memory"
+    echo "⬇  Downloading MCP-agent-memory source..."
+
+    TMPDIR=$(mktemp -d -t mcp-mem.XXXXXX)
+    cleanup() { rm -rf "$TMPDIR"; }
+    trap cleanup EXIT
+
+    if ! curl -fsSL "${REPO_URL}/archive/refs/heads/main.tar.gz" -o "$TMPDIR/src.tar.gz"; then
+        echo "  ✗ Download failed. Check your internet connection."
+        exit 1
+    fi
+
+    mkdir -p "$TMPDIR/repo"
+    tar -xzf "$TMPDIR/src.tar.gz" -C "$TMPDIR/repo" --strip-components=1
+    echo "  ✓ Source downloaded ($(du -sh "$TMPDIR/repo" | awk '{print $1}'))"
+
+    # Copy source to install dir and run installer from there
+    mkdir -p "$INSTALL_DIR"
+    cp -a "$TMPDIR/repo/." "$INSTALL_DIR/"
+    echo "  ✓ Source installed at $INSTALL_DIR"
+
+    exec bash "$INSTALL_DIR/install.sh" "$INSTALL_DIR"
+fi
+
+# ── Main installer (runs from inside the repo) ──
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 INSTALL_DIR="${1:-$SCRIPT_DIR}"
+
 GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; CYAN='\033[0;36m'; NC='\033[0m'; BOLD='\033[1m'
 pass() { echo -e "  ${GREEN}✓${NC} $1"; }
 fail() { echo -e "  ${RED}✗${NC} $1"; ERRORS=$((ERRORS+1)); }
@@ -32,14 +70,11 @@ if [ "$PYMAJOR" -lt 3 ] || { [ "$PYMAJOR" -eq 3 ] && [ "$PYMINOR" -lt 12 ]; }; t
 fi
 pass "Python $PYVER"
 
-if ! command -v git &>/dev/null; then fail "git not found"; exit 1; fi
-pass "git $(git --version | awk '{print $3}')"
-
 if [ ! -f "$SCRIPT_DIR/src/unified/server/main.py" ]; then
-    fail "Not inside MCP-agent-memory repo. Run: git clone ... && cd MCP-agent-memory && bash install.sh"
+    fail "Source not found at $SCRIPT_DIR/src/unified/server/main.py"
     exit 1
 fi
-pass "Repo detected at $SCRIPT_DIR"
+pass "Source detected at $SCRIPT_DIR"
 echo ""
 
 # ── Step 1: Virtual environment ─────────────────────────────────
@@ -63,26 +98,36 @@ fi
 
 source "$SCRIPT_DIR/.venv/bin/activate"
 
-# Use uv if available (faster + more reliable), fallback to pip
 PIP="pip"
 if command -v uv &>/dev/null; then
     PIP="uv pip"
 fi
 $PIP install --upgrade pip -q 2>/dev/null || true
 pass "pip upgraded"
+
+# Install from vendored wheels if available (offline install)
+if [ -d "$SCRIPT_DIR/deps/vendor" ]; then
+    $PIP install --no-index --find-links "$SCRIPT_DIR/deps/vendor" \
+        pydantic httpx mcp pydantic-settings python-dotenv -q 2>/dev/null && \
+        pass "Dependencies installed from vendor wheels" || true
+fi
 echo ""
 
 # ── Step 2: Dependencies ────────────────────────────────────────
 echo -e "${BOLD}[2/8] Python dependencies${NC}"
 echo "────────────────────────────────────────────────────────────"
 
-DEPS=("pydantic>=2.0" "httpx>=0.27" "mcp>=1.27")
+DEPS=("pydantic>=2.0" "httpx>=0.27" "mcp>=1.27" "pydantic-settings>=2.0" "python-dotenv>=1.0")
 DEVS=("pytest>=8.0" "pytest-asyncio>=0.23")
 
 for dep in "${DEPS[@]}"; do
     $PIP install "$dep" -q 2>/dev/null
     pkg=$(echo "$dep" | sed 's/[>=<].*//')
-    if python3 -c "import $pkg" 2>/dev/null; then pass "$dep"; else fail "$dep"; fi
+    if python3 -c "import ${pkg//-/_}" 2>/dev/null || python3 -c "import $pkg" 2>/dev/null; then
+        pass "$dep"
+    else
+        fail "$dep"
+    fi
 done
 for dep in "${DEVS[@]}"; do
     $PIP install "$dep" -q 2>/dev/null
@@ -128,7 +173,6 @@ if curl -s --max-time 3 http://127.0.0.1:8081/health 2>/dev/null | grep -q "ok";
     EMB_OK=true
 else
     mkdir -p "$SCRIPT_DIR/models"
-    # Determine model precision
     PRECISION=${MODEL_PRECISION:-Q4_K_M}
     case "$PRECISION" in
         Q4|q4|Q4_K_M) MODEL="$SCRIPT_DIR/models/bge-m3-Q4_K_M.gguf"; MODEL_URL="https://huggingface.co/gpustack/bge-m3-GGUF/resolve/main/bge-m3-Q4_K_M.gguf" ;;
@@ -137,7 +181,7 @@ else
     esac
     LLAMA_BIN="$SCRIPT_DIR/engine/bin/llama-server"
     if [ ! -f "$MODEL" ]; then
-        info "Downloading BGE-M3 model ($PRECISION, ~$(case $PRECISION in Q8*) echo 605MB;; *) echo 417MB;; esac))..."
+        info "Downloading BGE-M3 model ($PRECISION)..."
         if curl -L --progress-bar -o "$MODEL" "$MODEL_URL" 2>/dev/null; then
             pass "Model downloaded ($(du -h "$MODEL" | awk '{print $1}'))"
         else
@@ -235,18 +279,15 @@ MCP_JSON='{
   }
 }'
 
-# Save standalone config
 echo "$MCP_JSON" | python3 -m json.tool > "$SCRIPT_DIR/config/mcp.json" 2>/dev/null || echo "$MCP_JSON" > "$SCRIPT_DIR/config/mcp.json"
 pass "config/mcp.json generated"
 
-# Detect and configure MCP clients
 CONFIGURED=0
 for CLIENT_CONFIG in "$HOME/.pi/mcp.json" "$HOME/.config/claude/claude_desktop_config.json"; do
     CLIENT_DIR=$(dirname "$CLIENT_CONFIG")
     if [ -d "$CLIENT_DIR" ] || [ -f "$CLIENT_CONFIG" ]; then
         mkdir -p "$CLIENT_DIR"
         if [ -f "$CLIENT_CONFIG" ]; then
-            # Merge into existing config
             EXISTING=$(cat "$CLIENT_CONFIG")
             MERGED=$(echo "$EXISTING" | python3 -c "
 import sys, json
@@ -281,7 +322,6 @@ echo "────────────────────────�
 
 VERIFY_OK=0; VERIFY_TOTAL=0
 
-# Test 1: Python imports
 VERIFY_TOTAL=$((VERIFY_TOTAL+1))
 if "$SCRIPT_DIR/.venv/bin/python3" -c "
 import sys; sys.path.insert(0,'$SCRIPT_DIR/src')
@@ -296,7 +336,6 @@ else
     fail "Python imports"
 fi
 
-# Test 2: Config validation
 VERIFY_TOTAL=$((VERIFY_TOTAL+1))
 if "$SCRIPT_DIR/.venv/bin/python3" -c "
 import sys; sys.path.insert(0,'$SCRIPT_DIR/src')
@@ -311,7 +350,6 @@ else
     fail "Config validation"
 fi
 
-# Test 3: Qdrant connectivity
 VERIFY_TOTAL=$((VERIFY_TOTAL+1))
 if [ "$QDRANT_OK" = true ]; then
     if "$SCRIPT_DIR/.venv/bin/python3" -c "
@@ -332,10 +370,8 @@ else
     warn "Qdrant not available — skipped"
 fi
 
-# Test 4: Embedding
 VERIFY_TOTAL=$((VERIFY_TOTAL+1))
 if [ "$EMB_OK" = true ]; then
-    # Load env vars from config/.env for the test
     set -a; [ -f "$SCRIPT_DIR/config/.env" ] && source "$SCRIPT_DIR/config/.env"; set +a
     if "$SCRIPT_DIR/.venv/bin/python3" -c "
 import sys; sys.path.insert(0,'$SCRIPT_DIR/src')
@@ -352,7 +388,6 @@ else
     warn "Embedding server not available — skipped"
 fi
 
-# Test 5: Unit tests
 VERIFY_TOTAL=$((VERIFY_TOTAL+1))
 TEST_RESULT=$("$SCRIPT_DIR/.venv/bin/python3" -m pytest "$SCRIPT_DIR/tests/" -q --tb=no 2>/dev/null | tail -1)
 if echo "$TEST_RESULT" | grep -q "passed"; then
