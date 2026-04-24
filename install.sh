@@ -29,6 +29,7 @@ if [ ! -f "$SCRIPT_DIR/src/unified/server/main.py" ]; then
 
     mkdir -p "$TMPDIR/repo"
     tar -xzf "$TMPDIR/src.tar.gz" -C "$TMPDIR/repo" --strip-components=1
+    rm -rf "$TMPDIR/repo/.git"
     echo "  ✓ Source downloaded ($(du -sh "$TMPDIR/repo" | awk '{print $1}'))"
 
     # Copy source to install dir and run installer from there
@@ -194,14 +195,9 @@ else
         pass "Model exists ($PRECISION, $(du -h "$MODEL" | awk '{print $1}'))"
     fi
     if [ -f "$LLAMA_BIN" ]; then
-        nohup "$LLAMA_BIN" -m "$MODEL" --port 8081 --host 127.0.0.1 --embedding --pooling mean -ngl 99 --log-disable >> "$SCRIPT_DIR/embedding.log" 2>&1 &
-        sleep 3
-        if curl -s --max-time 5 http://127.0.0.1:8081/health 2>/dev/null | grep -q "ok"; then
-            pass "Embedding server started (PID $(pgrep -f llama-server | head -1))"
-            EMB_OK=true
-        else
-            fail "llama-server failed to start (check embedding.log)"
-        fi
+        warn "llama-server binary found but not running. Start it:"
+        info "  $LLAMA_BIN -m $MODEL --port 8081 --host 127.0.0.1 --embedding --pooling mean -ngl 99 --log-disable"
+        WARNINGS=$((WARNINGS+1))
     else
         warn "llama-server not found. Compile llama.cpp with Metal support:"
         info "  git clone https://github.com/ggerganov/llama.cpp $SCRIPT_DIR/engine/llama.cpp"
@@ -412,13 +408,43 @@ else
 fi
 echo -e "${BOLD}════════════════════════════════════════════════════════════${NC}"
 echo ""
-echo "Next steps:"
-echo "  1. Restart your MCP client (Pi, Claude Desktop, etc.)"
-echo "  2. The MCP-agent-memory tools should appear automatically"
-echo "  3. Test with: memory_store(content='installation test', tags='setup')"
+# ── Service startup instructions ──
 echo ""
-echo "Services that need to be running:"
-echo "  • Qdrant:      http://127.0.0.1:6333"
-echo "  • Embedding:   http://127.0.0.1:8081"
-echo "  • Ollama:      http://localhost:11434"
-echo ""
+NEED_SERVICES=false
+if [ "$QDRANT_OK" = false ]; then NEED_SERVICES=true; fi
+if [ "$EMB_OK" = false ]; then NEED_SERVICES=true; fi
+
+if [ "$NEED_SERVICES" = true ]; then
+    echo -e "${BOLD}Services required — run each in a separate terminal:${NC}"
+    echo ""
+    if [ "$QDRANT_OK" = false ]; then
+        if [ -f "$SCRIPT_DIR/bin/qdrant" ]; then
+            echo -e "  ${CYAN}Terminal 1 — Qdrant:${NC}"
+            echo "    $SCRIPT_DIR/bin/qdrant --config-path $SCRIPT_DIR/bin/config.yaml"
+            echo ""
+        else
+            echo -e "  ${CYAN}Terminal 1 — Qdrant:${NC}"
+            echo "    Download binary first, then run:"
+            echo "    $SCRIPT_DIR/bin/qdrant --config-path $SCRIPT_DIR/bin/config.yaml"
+            echo ""
+        fi
+    fi
+    if [ "$EMB_OK" = false ]; then
+        MODEL="${SCRIPT_DIR}/models/bge-m3-Q4_K_M.gguf"
+        LLAMA_BIN="${SCRIPT_DIR}/engine/bin/llama-server"
+        if [ -f "$LLAMA_BIN" ]; then
+            echo -e "  ${CYAN}Terminal 2 — Embedding server:${NC}"
+            echo "    $LLAMA_BIN -m $MODEL --port 8081 --host 127.0.0.1 --embedding --pooling mean -ngl 99 --log-disable"
+            echo ""
+        else
+            echo -e "  ${CYAN}Terminal 2 — Embedding server:${NC}"
+            echo "    Compile llama.cpp first (see instructions above), then run:"
+            echo "    $LLAMA_BIN -m $MODEL --port 8081 --host 127.0.0.1 --embedding --pooling mean -ngl 99 --log-disable"
+            echo ""
+        fi
+    fi
+    echo "After starting services, restart your MCP client (Pi, Claude Desktop, etc.)"
+else
+    echo "All services running. Restart your MCP client to use MCP-agent-memory."
+fi
+echo """
