@@ -11,7 +11,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" 2>/dev/null && pwd)"
-INSTALL_DIR="${1:-$HOME/MCP-agent-memory}"
+INSTALL_DIR="${1:-$HOME/MCP-servers/MCP-agent-memory}"
 
 # ── Auto-bootstrap: download source via tarball if not inside repo ──
 if [ ! -f "$SCRIPT_DIR/src/unified/server/main.py" ]; then
