@@ -158,10 +158,10 @@ elif [ -f "$SCRIPT_DIR/bin/qdrant" ]; then
         fail "Qdrant binary exists but failed to start (check qdrant.log)"
     fi
 else
-    warn "Qdrant not found. Install:"
-    info "macOS:  brew install qdrant"
-    info "Linux:  curl -L https://github.com/qdrant/qdrant/releases/latest/download/qdrant-x86_64-unknown-linux-musl.tar.gz | tar xz"
-    info "Place binary at: $SCRIPT_DIR/bin/qdrant"
+    warn "Qdrant not found."
+    info "Download binary to $SCRIPT_DIR/bin/qdrant"
+    info "  curl -L https://github.com/qdrant/qdrant/releases/latest/download/qdrant-x86_64-unknown-linux-musl.tar.gz | tar xz"
+    info "  mv qdrant $SCRIPT_DIR/bin/qdrant"
     WARNINGS=$((WARNINGS+1))
 fi
 echo ""
@@ -203,10 +203,10 @@ else
             fail "llama-server failed to start (check embedding.log)"
         fi
     else
-        warn "llama-server not found. Install llama.cpp:"
-        info "macOS:  brew install llama.cpp"
-        info "Linux:  git clone https://github.com/ggerganov/llama.cpp && cd llama.cpp && make -j"
-        info "Place binary at: $LLAMA_BIN"
+        warn "llama-server not found. Compile llama.cpp with Metal support:"
+        info "  git clone https://github.com/ggerganov/llama.cpp $SCRIPT_DIR/engine/llama.cpp"
+        info "  cd $SCRIPT_DIR/engine/llama.cpp && cmake -B build -DLLAMA_METAL=ON && cmake --build build --config Release -j"
+        info "  cp build/bin/llama-server $LLAMA_BIN"
         WARNINGS=$((WARNINGS+1))
     fi
 fi
