@@ -48,6 +48,7 @@ pass() { echo -e "  ${GREEN}✓${NC} $1"; }
 fail() { echo -e "  ${RED}✗${NC} $1"; ERRORS=$((ERRORS+1)); }
 warn() { echo -e "  ${YELLOW}⚠${NC} $1"; }
 info() { echo -e "  ${CYAN}→${NC} $1"; }
+import_name() { case "$1" in python-dotenv) echo dotenv;; pyyaml) echo yaml;; *) echo "${1//-/_}";; esac; }
 ERRORS=0; WARNINGS=0
 
 echo ""
@@ -123,7 +124,8 @@ DEVS=("pytest>=8.0" "pytest-asyncio>=0.23")
 for dep in "${DEPS[@]}"; do
     $PIP install "$dep" -q 2>/dev/null
     pkg=$(echo "$dep" | sed 's/[>=<].*//')
-    if python3 -c "import ${pkg//-/_}" 2>/dev/null || python3 -c "import $pkg" 2>/dev/null; then
+    imp=$(import_name "$pkg")
+    if python3 -c "import $imp" 2>/dev/null; then
         pass "$dep"
     else
         fail "$dep"
@@ -132,7 +134,8 @@ done
 for dep in "${DEVS[@]}"; do
     $PIP install "$dep" -q 2>/dev/null
     pkg=$(echo "$dep" | sed 's/[>=<].*//')
-    if python3 -c "import ${pkg//-/_}" 2>/dev/null; then pass "$dep (dev)"; else fail "$dep"; fi
+    imp=$(import_name "$pkg")
+    if python3 -c "import $imp" 2>/dev/null; then pass "$dep (dev)"; else fail "$dep"; fi
 done
 echo ""
 
