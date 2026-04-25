@@ -28,9 +28,12 @@ Todo modelo de lenguaje grande (LLM) opera sobre una ventana de contexto finita.
 |--------|---------------------|-------|
 | GPT-4o | 128K tokens | Referencia de la industria |
 | Claude 3.5 Sonnet | 200K tokens | Alto rendimiento en código |
-| Gemini 1.5 Pro | 1M tokens | La más grande del mercado |
-| Qwen 2.5 | 128K tokens | Open-source, 7B-72B parámetros |
-| Llama 3.3 | 128K tokens | Meta, open-source |
+| Gemini 1.5 Pro | 2M tokens | La ventana más grande en producción |
+| Qwen 2.5-1M | 1M tokens | Open-source, experimental |
+| Llama 4 Scout | **10M tokens** | Open-source, MoE (abril 2025) |
+| Llama 4 Maverick | 1M tokens | Open-source, MoE |
+| Llama 3.3 70B | 128K tokens | Open-source, dense |
+| DeepSeek R1/V3 | 128K tokens | Open-source, MoE, reasoning |
 | Mistral Large | 128K tokens | Open-weight |
 
 **El problema no es solo el tamaño, sino la gestión**. Una ventana de 128K tokens se llena rápidamente en una sesión de desarrollo intensiva: instrucciones del sistema (~4K), contexto de archivos (~20K), historial de conversación (~30K), respuestas de herramientas (~50K), y el margen se reduce a cero.
@@ -87,12 +90,15 @@ La mayoría de los sistemas existentes cubren las primeras 5 fases. La **verific
 
 | Sistema | ⭐ Stars | Enfoque | Almacenamiento | CLI Support | MCP | Licencia |
 |---------|----------|---------|----------------|-------------|-----|----------|
-| **Mem0** | 54.1K | Capa de memoria universal | Vector + BM25 + Entity | CLI propia (`mem0-cli`) | ❌ | Apache 2.0 |
-| **GraphRAG** | 32.5K | RAG basado en grafos (Microsoft) | Knowledge Graph | ❌ | ❌ | MIT |
+| **Mem0** | 54.1K | Capa de memoria universal | Vector + BM25 + Entity | CLI propia (`mem0-cli`) | ✅ (OpenMemory) | Apache 2.0 |
+| **LightRAG** | 34.3K | RAG ligero basado en grafos | Knowledge Graph | CLI propia (`lightrag-server`) | ❌ | MIT |
+| **GraphRAG** | 32.5K | RAG basado en grafos (Microsoft) | Knowledge Graph | CLI propia (`graphrag`) | ❌ | MIT |
 | **Supermemory** | 22.2K | Motor de memoria + contexto | Propio | Plugins para OpenCode, Claude Code | ✅ MCP nativo | MIT |
-| **Letta/MemGPT** | 22.3K | Agentes con memoria stateful | Multi-layer | CLI propia (`letta`) | ❌ | Apache 2.0 |
-| **LangMem** | 1.4K | Memoria para LangGraph | LangGraph Store | ❌ | ❌ | MIT |
+| **Letta/MemGPT** | 22.3K | Agentes con memoria stateful | Multi-layer | CLI propia (`letta-code`) | ✅ | Apache 2.0 |
+| **Cognee** | 16.8K | Motor de conocimiento cognitivo | KG + Vector | CLI propia (`cognee-cli`) | ✅ | Apache 2.0 |
 | **Zep** | 4.5K | Context engineering platform | Temporal Knowledge Graph | ❌ | ✅ MCP server | Apache 2.0 |
+| **HippoRAG** | 3.4K | RAG neurobiológicamente inspirado | KG + PageRank | ❌ | ❌ | MIT |
+| **LangMem** | 1.4K | Memoria para LangGraph | LangGraph Store | ❌ | ❌ | MIT |
 
 ### 3.2 Análisis detallado
 
@@ -223,6 +229,58 @@ La mayoría de los sistemas existentes cubren las primeras 5 fases. La **verific
 
 **Para nuestro caso de uso**: GraphRAG es relevante como inspiración para recuperación basada en grafos, pero no es un sistema de memoria para agentes CLI. Podría complementar nuestro sistema como capa de indexación de documentación de proyectos.
 
+#### 3.2.4a LightRAG — RAG ligero basado en grafos
+
+**Repositorio**: `HKUDS/LightRAG` (34.3K ⭐)  
+**Enfoque**: RAG ligero con indexación en grafos  
+**Paper**: Guo et al. (2024), EMNLP 2025
+
+**Arquitectura**:
+- Indexación dual-level (entity + relation level) más eficiente que GraphRAG
+- Superiores a GraphRAG en diversidad (73-86% win rate)
+- Almacenamiento flexible: Neo4j, MongoDB, PostgreSQL, OpenSearch
+- Multimodal vía RAG-Anything (PDFs, imágenes, tablas, fórmulas)
+- Web UI con visualización del knowledge graph
+
+**Fortalezas**:
+- Más eficiente que GraphRAG — menos tokens de indexing
+- Eliminación de documentos con regeneración automática del KG
+- Soporte multimodal nativo
+- EMNVL 2025 — validación académica
+
+**Limitaciones**:
+- Requiere LLM de ≥32B parámetros, contexto 32-64KB
+- No es sistema de memoria para agentes — es pipeline de RAG
+- Sin MCP, sin integración CLI de desarrollo
+
+**Para nuestro caso de uso**: Similar a GraphRAG — inspiración para grafos pero no un sistema de memoria. La eliminación incremental de documentos es un patrón relevante para nuestra verificación.
+
+#### 3.2.4b Cognee — Motor de conocimiento cognitivo
+
+**Repositorio**: `topoteretes/cognee` (16.8K ⭐)  
+**Enfoque**: Motor de conocimiento con grafo ontológico + vector + arquitectura cognitiva  
+**Paper**: Markovic et al. (2025), arXiv:2505.24478
+
+**Arquitectura**:
+- 4 operaciones: `remember`, `recall`, `forget`, `improve`
+- Knowledge graphs ontológicos con soporte Neo4j
+- Session memory (fast cache) + permanent graph con sync en background
+- Auto-routing recall: selecciona automáticamente la mejor estrategia de búsqueda
+- Plugins para Claude Code y OpenClaw
+
+**Fortalezas**:
+- Las 4 operaciones cubren el ciclo completo de memoria (incluyendo forget)
+- Background sync entre cache y storage permanente
+- Ontología anclada — más preciso que embeddings planos
+- Integración con Claude Code (nuestro target)
+
+**Limitaciones**:
+- Orientado a datos empresariales, no específicamente a desarrollo de software
+- No tiene freshness tracking ni verificación
+- Requiere Neo4j para grafo completo
+
+**Para nuestro caso de uso**: La operación `forget` y el auto-routing recall son patrones relevantes. El background sync es similar a nuestro autodream.
+
 #### 3.2.5 Zep / Graphiti — Context engineering con grafos temporales
 
 **Repositorio**: `getzep/zep` (4.5K ⭐)  
@@ -313,18 +371,18 @@ Ningún servidor MCP de memoria está diseñado específicamente para el flujo d
 
 ### 5.1 Landscape actual
 
-| Herramienta | Tipo | Memoria nativa | MCP | Context mgmt | Open-source | Costo |
-|-------------|------|---------------|-----|-------------|-------------|-------|
-| **OpenCode** | CLI TUI | ❌ Ninguna | ✅ Cliente | ❌ Ninguno | ✅ (Go) | Gratuito |
-| **Claude Code** | CLI agente | ✅ Memory básica | ✅ Cliente + Server | ✅ Compaction | ❌ | API costs |
-| **Aider** | CLI agente | ❌ Ninguna | ❌ | ❌ Básico | ✅ (Python) | API costs |
-| **Cursor** | IDE | ❌ Por proyecto | ✅ Cliente | ✅ @codebase | ❌ | Freemium |
-| **Cline** | VS Code ext | ❌ Ninguna | ✅ Cliente | ❌ | ✅ (TypeScript) | API costs |
-| **Continue.dev** | IDE ext | ❌ Ninguna | ✅ Cliente | ✅ @docs, @code | ✅ (TypeScript) | API costs |
-| **Kiro** | CLI (AWS) | ❌ Desconocido | ✅ | ✅ Specs | ❌ | Gratuito |
-| **OpenHands** | Web agent | ❌ Ninguna | ❌ | ❌ | ✅ (Python) | API costs |
-| **SWE-agent** | CLI agente | ❌ Ninguna | ❌ | ❌ | ✅ (Python) | API costs |
-| **CLI-agent-memory** | CLI agente | ✅ Multi-capa | ✅ Server | ✅ Smart retrieve | ✅ (Python) | Gratuito (local LLM) |
+| Herramienta | ⭐ Stars | Tipo | Memoria nativa | MCP | Context mgmt | Open-source | Costo |
+|-------------|----------|------|---------------|-----|-------------|-------------|-------|
+| **OpenCode** | 149K | CLI TUI + Desktop | ❌ Ninguna | ✅ Cliente + Server | ❌ Ninguno | ✅ (Go/TS) | Gratuito |
+| **OpenHands** | 72.1K | CLI + GUI + SDK | ❌ Básica | ✅ Cliente | ✅ Microagents | ✅ (Python) | API costs |
+| **Cline** | 61K | VS Code ext | ❌ Ninguna | ✅ Cliente + creador | ✅ File AST, browser | ✅ (TypeScript) | API costs |
+| **Aider** | 43.9K | CLI | ❌ Ninguna | ❌ | ✅ Repo map | ✅ (Python) | API costs |
+| **Continue** | 32.8K | VS Code + JetBrains | ❌ Ninguna | ✅ Cliente | ✅ @docs, @code | ✅ (TypeScript) | API costs |
+| **SWE-agent** | 19.1K | CLI | ❌ Ninguna | ❌ | ❌ YAML config | ✅ (Python) | API costs |
+| **Claude Code** | — | CLI agente | ✅ Memory básica | ✅ Cliente + Server | ✅ Compaction | ❌ | API costs |
+| **Cursor** | — | IDE (VS Code fork) | ❌ Por proyecto | ✅ Cliente | ✅ @codebase | ❌ | Freemium |
+| **Kiro** | — | CLI (AWS) | ❌ Desconocido | ✅ | ✅ Specs + steering | ❌ | Gratuito |
+| **CLI-agent-memory** | — | CLI agente | ✅ Multi-capa | ✅ Server | ✅ Smart retrieve | ✅ (Python) | Gratuito (local LLM) |
 
 ### 5.2 El problema común: la memoria
 
@@ -440,11 +498,14 @@ Para nuestro caso de uso específico — **memoria para agentes CLI de desarroll
 |---------|------------|-----------|-----------|-------------|----------------|-------------|-----|-------------|
 | **MCP-agent-memory** | ✅ | ✅ OpenCode | 🔜 v1.4 | ✅ L0-L4 | ✅ | 🔜 v1.4 | ✅ | ✅ |
 | **Supermemory** | ❌ Cloud | ✅ OpenCode+CC | ✅ Auto-forget | ❌ | ✅ Tags | ❌ | ✅ | ❌ |
-| **Mem0** | ✅ Lib | ❌ | ❌ | ❌ | ✅ user_id | ❌ | ❌ | ✅ |
-| **Letta** | ✅ CLI | ✅ CLI propia | ❌ | ✅ Blocks | ✅ Agent-scoped | ❌ | ❌ | ✅ |
+| **Mem0** | ✅ Lib | ✅ CLI propia | ❌ | ❌ | ✅ user_id | ❌ | ✅ OpenMemory | ✅ |
+| **Letta** | ✅ CLI | ✅ CLI propia | ❌ | ✅ Blocks | ✅ Agent-scoped | ❌ | ✅ | ✅ |
+| **Cognee** | ✅ | ✅ CLI+Claude Code | ❌ | ✅ Cache+Graph | ✅ | ❌ | ✅ | ✅ |
 | **Zep** | ❌ Cloud | ❌ | ✅ Temporal KG | ❌ | ✅ | ❌ | ✅ | ❌ |
 | **LangMem** | ✅ | ❌ | ❌ | ✅ BG+Hot | ✅ Namespace | ❌ | ❌ | ✅ |
-| **GraphRAG** | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
+| **GraphRAG** | ✅ | ✅ CLI propia | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
+| **LightRAG** | ✅ | ✅ CLI propia | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
+| **HippoRAG** | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
 
 ### 7.3 El gap de verificación
 
@@ -584,6 +645,9 @@ El protocolo MCP es el pegamento que permite que estas capas trabajen juntas. Lo
 7. Gutierrez, B., et al. (2024). *HippoRAG: Retrieval-Augmented Generation with Hippocampal Indexing*.
 8. Chhikara, P., et al. (2025). *Mem0: Building Production-Ready AI Agents with Scalable Long-Term Memory*. arXiv:2504.19413.
 9. Park, J. S., et al. (2023). *Generative Agents: Interactive Simulacra of Human Behavior*. UIST 2023.
+10. Guo, Z., et al. (2024). *LightRAG: Simple and Fast Retrieval-Augmented Generation*. EMNLP 2025. arXiv:2410.05779.
+11. Markovic, V., et al. (2025). *Optimizing the Interface Between Knowledge Graphs and LLMs for Complex Reasoning*. arXiv:2505.24478.
+12. Gutiérrez, B.J., et al. (2025). *From RAG to Memory: Non-Parametric Continual Learning for Large Language Models*. ICML 2025. arXiv:2502.14802. (HippoRAG 2)
 
 ### Neurociencia
 
@@ -603,6 +667,10 @@ El protocolo MCP es el pegamento que permite que estas capas trabajen juntas. Lo
 20. LangMem — https://github.com/langchain-ai/langmem (1.4K ⭐)
 21. MCP-agent-memory — https://github.com/Ruben-Alvarez-Dev/MCP-agent-memory
 22. CLI-agent-memory — https://github.com/Ruben-Alvarez-Dev/CLI-agent-memory
+23. LightRAG — https://github.com/HKUDS/LightRAG (34.3K ⭐)
+24. Cognee — https://github.com/topoteretes/cognee (16.8K ⭐)
+25. HippoRAG — https://github.com/OSU-NLP-Group/HippoRAG (3.4K ⭐)
+26. LLMLingua — https://github.com/microsoft/LLMLingua (6.1K ⭐)
 
 ### Benchmarks
 
@@ -616,24 +684,24 @@ El protocolo MCP es el pegamento que permite que estas capas trabajen juntas. Lo
 
 ## A. Apéndice — Tabla de Funcionalidades Detallada
 
-| Feature | MCP-agent-memory | Supermemory | Mem0 | Letta | Zep | LangMem | GraphRAG |
-|---------|-----------------|-------------|------|-------|-----|---------|----------|
-| Fact extraction | ✅ automem | ✅ auto | ✅ single-pass | ✅ agent-edited | ✅ auto | ✅ tools | ✅ pipeline |
-| Vector search | ✅ Qdrant | ✅ propio | ✅ propio | ❌ | ✅ | ✅ | ❌ |
-| BM25 keyword | ✅ | ✅ | ✅ (new) | ❌ | ✅ | ❌ | ❌ |
-| Entity linking | ❌ | ❌ | ✅ (new) | ❌ | ✅ Graphiti | ❌ | ✅ |
-| Knowledge Graph | 🔜 futuro | ❌ | ❌ | ❌ | ✅ Temporal | ❌ | ✅ |
-| Multi-layer consolidation | ✅ L0-L4 | ❌ | ❌ | ✅ blocks | ❌ | ✅ hot/bg | ❌ |
-| Freshness tracking | 🔜 v1.4 | ✅ auto-forget | ❌ | ❌ | ✅ temporal | ❌ | ❌ |
-| Verification | 🔜 v1.4 | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| MCP server | ✅ 53 tools | ✅ 3 tools | ❌ | ❌ | ✅ | ❌ | ❌ |
-| CLI integration | ✅ OpenCode | ✅ OpenCode+CC | ❌ | ✅ propia | ❌ | ❌ | ❌ |
-| Local-first | ✅ | ❌ cloud | ✅ lib | ✅ | ❌ cloud | ✅ | ✅ |
-| Self-hosted server | ✅ sidecar | ❌ | ✅ Docker | ✅ | ❌ deprecated | ✅ | ✅ |
-| Code-aware events | ✅ git/file/terminal | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| Project scoping | ✅ scope_type | ✅ containerTags | ✅ user_id | ✅ agent | ✅ user | ✅ namespace | ❌ |
-| Open-source | ✅ | ✅ MIT | ✅ Apache 2.0 | ✅ Apache 2.0 | ✅ (legacy) | ✅ MIT | ✅ MIT |
-| Cost | Gratuito (local) | Freemium | Gratuito (lib) | Gratuito (local) | Cloud pricing | Gratuito | Gratuito |
+| Feature | MCP-agent-memory | Supermemory | Mem0 | Letta | Cognee | Zep | LangMem | GraphRAG | LightRAG | HippoRAG |
+|---------|-----------------|-------------|------|-------|--------|-----|---------|----------|----------|----------|
+| Fact extraction | ✅ automem | ✅ auto | ✅ single-pass | ✅ agent-edited | ✅ 4 ops | ✅ auto | ✅ tools | ✅ pipeline | ✅ | ✅ OpenIE |
+| Vector search | ✅ Qdrant | ✅ propio | ✅ propio | ❌ | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ |
+| BM25 keyword | ✅ | ✅ | ✅ (new) | ❌ | ✅ | ✅ | ❌ | ❌ | ✅ | ❌ |
+| Entity linking | ❌ | ❌ | ✅ (new) | ❌ | ✅ | ✅ Graphiti | ❌ | ✅ | ✅ | ✅ |
+| Knowledge Graph | 🔜 futuro | ❌ | ❌ | ❌ | ✅ Neo4j | ✅ Temporal | ❌ | ✅ | ✅ | ✅ |
+| Multi-layer consolidation | ✅ L0-L4 | ❌ | ❌ | ✅ blocks | ✅ cache+graph | ❌ | ✅ hot/bg | ❌ | ❌ | ❌ |
+| Freshness tracking | 🔜 v1.4 | ✅ auto-forget | ❌ | ❌ | ❌ | ✅ temporal | ❌ | ❌ | ❌ | ❌ |
+| Verification | 🔜 v1.4 | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| MCP server | ✅ 53 tools | ✅ 3 tools | ✅ OpenMemory | ✅ | ✅ cognee-mcp | ✅ | ❌ | ❌ | ❌ | ❌ |
+| CLI integration | ✅ OpenCode | ✅ OpenCode+CC | ✅ CLI propia | ✅ CLI propia | ✅ CC+OpenClaw | ❌ | ❌ | ✅ CLI | ✅ server | ❌ |
+| Local-first | ✅ | ❌ cloud | ✅ lib | ✅ | ✅ | ❌ cloud | ✅ | ✅ | ✅ | ✅ |
+| Self-hosted server | ✅ sidecar | ❌ | ✅ Docker | ✅ | ✅ | ❌ deprecated | ✅ | ✅ | ✅ | ❌ |
+| Code-aware events | ✅ git/file/terminal | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Project scoping | ✅ scope_type | ✅ containerTags | ✅ user_id | ✅ agent | ✅ | ✅ user | ✅ namespace | ❌ | ❌ | ❌ |
+| Open-source | ✅ | ✅ MIT | ✅ Apache 2.0 | ✅ Apache 2.0 | ✅ Apache 2.0 | ✅ (legacy) | ✅ MIT | ✅ MIT | ✅ MIT | ✅ MIT |
+| Cost | Gratuito (local) | Freemium | Gratuito (lib) | Gratuito (local) | Gratuito | Cloud pricing | Gratuito | Gratuito | Gratuito | Gratuito |
 
 ---
 
