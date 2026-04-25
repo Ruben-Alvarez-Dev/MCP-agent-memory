@@ -54,6 +54,7 @@ MAX_TAGS_COUNT = 20
 VALID_EVENT_TYPES = frozenset({
     "terminal", "git", "file", "system",
     "diff_proposed", "diff_accepted", "diff_rejected", "diff_applied", "diff_failed",
+    "tool_call", "user_prompt", "file_edited",
 })
 
 # Valid memory types

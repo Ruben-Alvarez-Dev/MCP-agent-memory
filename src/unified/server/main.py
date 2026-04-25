@@ -184,9 +184,41 @@ async def health_check() -> dict:
 
 def main() -> None:
     import logging
+    import os
     from shared.logging_config import setup_logging
     setup_logging()
     logger = logging.getLogger("agent-memory")
+
+    # ── Start Backpack HTTP API sidecar ────────────────────────────
+    # Runs in a background thread alongside the MCP stdio server.
+    # Plugin hooks call these endpoints via fetch() to trigger automatic
+    # memory operations without involving the LLM.
+    try:
+        from shared.api_server import start_api_server
+
+        # Import the tool functions from loaded modules.
+        # These modules were loaded above via importlib, so they exist in sys.modules.
+        automem_mod = sys.modules.get("automem")
+        autodream_mod = sys.modules.get("autodream")
+        conv_mod = sys.modules.get("conversation_store")
+        vk_cache_mod = sys.modules.get("vk_cache")
+
+        if automem_mod and autodream_mod and conv_mod:
+            start_api_server(
+                ingest_event_fn=getattr(automem_mod, "ingest_event", None),
+                automem_heartbeat_fn=getattr(automem_mod, "heartbeat", None),
+                autodream_heartbeat_fn=getattr(autodream_mod, "heartbeat", None),
+                save_conversation_fn=getattr(conv_mod, "save_conversation", None),
+                consolidate_fn=getattr(autodream_mod, "consolidate", None),
+                request_context_fn=getattr(vk_cache_mod, "request_context", None) if vk_cache_mod else None,
+                port=int(os.environ.get("AUTOMEM_API_PORT", "8890")),
+            )
+            logger.info("Backpack API sidecar started")
+        else:
+            logger.warning("Backpack API skipped: not all modules loaded")
+    except Exception as e:
+        logger.warning("Backpack API failed to start (non-fatal): %s", e)
+
     logger.info("Starting MCP server on stdio")
     mcp.run(transport="stdio")
 
