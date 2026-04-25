@@ -35,7 +35,7 @@ class Config:
     embedding_backend: str = "llama_server"
     embedding_dim: int = 1024
     embedding_model: str = ""
-    llama_server_url: str = "https://token-plan-ams.xiaomimimo.com/v1"
+    llama_server_url: str = "http://127.0.0.1:8081"
     embedding_cache_size: int = 512
 
     # ── LLM ───────────────────────────────────────────────────

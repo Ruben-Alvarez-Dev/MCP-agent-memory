@@ -375,7 +375,7 @@ class LlamaServerBackend(EmbeddingBackend):
      """
 
     def __init__(self):
-        self._url = os.getenv("LLAMA_SERVER_URL", "https://token-plan-ams.xiaomimimo.com/v1")
+        self._url = os.getenv("LLAMA_SERVER_URL", "http://127.0.0.1:8080")
         self._available: Optional[bool] = None
 
     def is_available(self) -> bool:
