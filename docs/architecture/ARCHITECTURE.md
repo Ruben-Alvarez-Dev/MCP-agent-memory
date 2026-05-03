@@ -26,7 +26,7 @@ MCP-agent-memory is a **passive memory service** — it exposes tools but doesn'
 │  │              MCP-agent-memory (Python, single process)           ││
 │  │                                                                  ││
 │  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐          ││
-│  │  │ automem  │ │autodream │ │ vk-cache │ │conv-store│          ││
+│  │  │ L0_capture_*  │ │autodream │ │ vk-cache │ │conv-store│          ││
 │  │  │ (4 tools)│ │ (8 tools)│ │ (6 tools)│ │ (5 tools)│          ││
 │  │  └──────────┘ └──────────┘ └──────────┘ └──────────┘          ││
 │  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐          ││
@@ -58,7 +58,7 @@ The agent sees 53 tools via the MCP protocol. It decides when to call them based
 - Transport: stdin/stdout (JSON-RPC)
 - Started by: OpenCode's MCP client
 - Entry point: `src/unified/server/main.py`
-- Each module registers tools with a prefix (e.g., `automem_*`)
+- Each module registers tools with a prefix (e.g., `L0_capture_**`)
 
 ### Interface 2: HTTP API sidecar (for the plugin)
 
@@ -73,11 +73,11 @@ The plugin calls 6 endpoints via HTTP to trigger automatic operations without in
 
 ## Module Details
 
-### automem — Real-time Memory Ingestion
+### L0_capture_* — Real-time Memory Ingestion
 
 | Component | File | Responsibility |
 |-----------|------|---------------|
-| Server | `src/automem/server/main.py` | MCP tools + HTTP API targets |
+| Server | `src/L0_capture_*/server/main.py` | MCP tools + HTTP API targets |
 | Models | `src/shared/models.py` | `MemoryItem`, `RawEvent`, `HeartbeatStatus` |
 | Sanitization | `src/shared/sanitize.py` | OWASP-grade input validation |
 

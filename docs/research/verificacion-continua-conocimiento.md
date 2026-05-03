@@ -29,7 +29,7 @@ Un sistema de memoria para agentes de IA enfrenta una tensión fundamental:
 - **No puede confiar ciegamente** en lo que recuerda porque la realidad cambia.
 - **No puede verificar todo** porque el costo computacional y temporal sería prohibitivo.
 
-Este problema se manifiesta en nuestro sistema MCP-agent-memory de forma concreta: tenemos 53 herramientas MCP, vk-cache inyecta contexto automáticamente en cada turno, y autodream consolida memories periódicamente. Pero **ningún mecanismo verifica que lo almacenado siga siendo cierto**.
+Este problema se manifiesta en nuestro sistema MCP-agent-memory de forma concreta: tenemos 53 herramientas MCP, L5_routing inyecta contexto automáticamente en cada turno, y L0_to_L4_consolidation consolida memories periódicamente. Pero **ningún mecanismo verifica que lo almacenado siga siendo cierto**.
 
 ### 1.2 Ejemplo concreto
 
@@ -69,7 +69,7 @@ Revisión narrativa estructurada con análisis comparativo. No es una revisión 
 
 **Hallazgo central**: Cuando el cerebro accede a un recuerdo a largo plazo, ese recuerdo se vuelve temporalmente lábil (inestable, modificable) antes de ser re-almacenado. Este proceso se llama **reconsolidación**.
 
-**Implicación para IA**: El acto de RECUPERAR una memoria no debería ser una operación de solo lectura. Debería ser una oportunidad de verificación y actualización. Cada vez que vk-cache recupera contexto, está accediendo a memories que podrían estar obsoletas. El sistema debería aprovechar ese acceso para verificar.
+**Implicación para IA**: El acto de RECUPERAR una memoria no debería ser una operación de solo lectura. Debería ser una oportunidad de verificación y actualización. Cada vez que L5_routing recupera contexto, está accediendo a memories que podrían estar obsoletas. El sistema debería aprovechar ese acceso para verificar.
 
 **Evidencia experimental**: Nader (2000) demostró que ratas a las que se les administraba un inhibidor de síntesis proteica inmediatamente después de reactivar un recuerdo de miedo perdían ese recuerdo permanentemente. Esto prueba que la reconsolidación es un proceso activo de re-escritura, no una simple re-lectura.
 
@@ -168,7 +168,7 @@ MemoryLLM (2024)   → Memoria autoactualizable dentro del modelo.
 
 **Algoritmo clave**: `decompose-then-recompose` — descompone los documentos recuperados en unidades de información, filtra las irrelevantes, y recompone solo las relevantes.
 
-**Aplicación a nuestro sistema**: vk-cache ya hace smart_retrieve con scoring por confianza. Pero no tiene la fase de **evaluación post-recuperación**. Cuando inyectamos contexto, nunca nos preguntamos: *"¿estos datos siguen siendo válidos?"*
+**Aplicación a nuestro sistema**: L5_routing ya hace smart_retrieve con scoring por confianza. Pero no tiene la fase de **evaluación post-recuperación**. Cuando inyectamos contexto, nunca nos preguntamos: *"¿estos datos siguen siendo válidos?"*
 
 ### 4.3 Self-RAG — Self-Reflective RAG (Asai et al., 2023)
 
@@ -306,7 +306,7 @@ El proceso completo tiene 5 fases, mapeadas a la arquitectura existente:
 
 #### FASE 1: RECALL — Recuperación mejorada
 
-**Ubicación**: `vk-cache/smart_retrieve()`  
+**Ubicación**: `L5_routing/smart_retrieve()`  
 **Cambio**: Agregar freshness_score al ranking de resultados.
 
 ```python
@@ -325,12 +325,12 @@ results.sort(key=lambda r: freshness_score(r), reverse=True)
 
 ```
 ANTES:
-[automem] (conf=0.75): CLI-agent-memory está en /tmp/CLI-agent-memory
+[L0_capture] (conf=0.75): CLI-agent-memory está en /tmp/CLI-agent-memory
 
 DESPUÉS:
-[automem] (conf=0.75, ✅ VERIFIED 2h ago): CLI-agent-memory está en ~/CLI-agent-memory
-[automem] (conf=0.80, ⚠️ STALE 5d ago): El proyecto usa ollama para embeddings
-[automem] (conf=0.70, ❓ NEVER VERIFIED): El adapter opencode está en el MCP repo
+[L0_capture] (conf=0.75, ✅ VERIFIED 2h ago): CLI-agent-memory está en ~/CLI-agent-memory
+[L0_capture] (conf=0.80, ⚠️ STALE 5d ago): El proyecto usa ollama para embeddings
+[L0_capture] (conf=0.70, ❓ NEVER VERIFIED): El adapter opencode está en el MCP repo
 ```
 
 **Impacto**: El agente ve qué datos son confiables y cuáles necesitan verificación. Puede priorizar sus acciones en consecuencia.
@@ -385,7 +385,7 @@ Comportamiento esperado:
 
 #### FASE 5: CONSOLIDATE — Refuerzo en el dream cycle
 
-**Ubicación**: `autodream` consolidation  
+**Ubicación**: `L0_to_L4_consolidation` consolidation  
 **Cambio**: Integrar verificación en el ciclo de consolidation existente.
 
 ```python
@@ -410,7 +410,7 @@ async def dream_cycle():
                          └──────────────────┬──────────────────────────┘
                                             │ usa contexto
                          ┌──────────────────▼──────────────────────────┐
-                         │         vk-cache (smart_retrieve)           │
+                         │         L5_routing (smart_retrieve)           │
                          │  Ordena por freshness_score                 │
                          │  confidence × decay(change_speed, age)     │
                          └──────────────────┬──────────────────────────┘
@@ -424,7 +424,7 @@ async def dream_cycle():
            ┌────────────────────────────────┼────────────────────────────────┐
            │                                │                                │
   ┌────────▼─────────┐        ┌────────────▼──────────┐       ┌────────────▼──────────┐
-  │  session.idle     │        │  autodream cycle       │       │  /api/verify-memories  │
+  │  session.idle     │        │  L0_to_L4_consolidation cycle       │       │  /api/verify-memories  │
   │  hook             │        │  (consolidación +      │       │  (endpoint manual)     │
   │  → verify stale   │        │   verificación)        │       │  → verificar bajo      │
   │  → update status  │        │  → verificar stale     │       │    demanda             │
@@ -459,7 +459,7 @@ No necesitamos reconstruir el sistema. Las extensiones propuestas se integran en
 - `MemoryItem` se extiende con 5 campos nuevos (backward compatible)
 - `smart_retrieve` agrega freshness scoring al ranking existente
 - `ContextPack.to_injection_text()` agrega tags visuales
-- `autodream` agrega un paso de verificación al ciclo existente
+- `L0_to_L4_consolidation` agrega un paso de verificación al ciclo existente
 - Nuevo endpoint `/api/verify-memories` para verificación bajo demanda
 
 ### 6.4 La validación empírica es necesaria
@@ -511,12 +511,12 @@ Este documento presenta una propuesta fundamentada, no una solución validada. L
 | Concepto neurocientífico | Componente MCP-agent-memory | Estado |
 |---|---|---|
 | Working Memory | Context window + ContextPack inyectado | ✅ Implementado (v1.3) |
-| L0 Raw Events | `automem.ingest_event` | ✅ Implementado |
-| L1 Working Memory | `mem0` + `automem.memorize` | ✅ Implementado |
-| L2 Episodic Memory | `conversation-store` + autodream L2 | ✅ Implementado |
-| L3 Semantic Memory | `engram` decisions + autodream L3 | ✅ Implementado |
-| L4 Consolidated | `autodream` L4 summaries | ✅ Implementado |
-| L5 Context Assembly | `vk-cache` smart_retrieve | ✅ Implementado |
+| L0 Raw Events | `L0_capture.ingest_event` | ✅ Implementado |
+| L1 Working Memory | `mem0` + `L0_capture.memorize` | ✅ Implementado |
+| L2 Episodic Memory | `L2_conversations` + L0_to_L4_consolidation L2 | ✅ Implementado |
+| L3 Semantic Memory | `engram` decisions + L0_to_L4_consolidation L3 | ✅ Implementado |
+| L4 Consolidated | `L0_to_L4_consolidation` L4 summaries | ✅ Implementado |
+| L5 Context Assembly | `L5_routing` smart_retrieve | ✅ Implementado |
 | Reconsolidación | verificación post-recuperación | 🔜 Propuesto |
 | Metamemoria | freshness_score + verified_at | 🔜 Propuesto |
 | Predictive Coding | background verification en session.idle | 🔜 Propuesto |

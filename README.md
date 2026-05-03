@@ -1,7 +1,7 @@
 # MCP-agent-memory
 
 > **Persistent multi-layer memory for AI coding agents.**
-> 53 MCP tools + HTTP API + auto-trigger plugin. Zero-config memory that works without the LLM remembering to use it.
+> 53 MCP tools + HTTP API + auto-trigger plugin + bilingual vault. Zero-config memory that works without the LLM remembering to use it.
 
 ---
 
@@ -23,13 +23,13 @@ The backpack captures events **automatically** (no LLM decision needed) and prov
 │  │  (OpenCode Plugin)    │    │      (Python MCP Server)         │  │
 │  │                       │    │                                   │  │
 │  │  AUTO-TRIGGERS:       │    │  53 MCP TOOLS:                   │  │
-│  │  • Every user prompt  │──→│  • automem (ingest, memorize)     │  │
-│  │  • Every tool call    │──→│  • autodream (consolidate, dream) │  │
-│  │  • Every file edit    │──→│  • vk-cache (context retrieval)   │  │
-│  │  • Session idle       │──→│  • conversation-store (threads)   │  │
-│  │  • Context compact    │──→│  • mem0 (semantic CRUD)           │  │
-│  │  • Commit validation  │    │  • engram (decisions, vault)      │  │
-│  │                       │    │  • sequential-thinking (plans)    │  │
+│  │  • Every user prompt  │──→│  • L0_capture_* (ingest, memorize) │  │
+│  │  • Every tool call    │──→│  • L0_to_L4_consolidation_*       │  │
+│  │  • Every file edit    │──→│  • L5_routing_* (context retrieval)│  │
+│  │  • Session idle       │──→│  • L2_conversations_* (threads)    │  │
+│  │  • Context compact    │──→│  • L3_facts_* (semantic CRUD)      │  │
+│  │  • Commit validation  │    │  • L3_decisions_* (vault)         │  │
+│  │                       │    │  • Lx_reasoning_* (plans)         │  │
 │  │  HTTP → localhost:8890│    │                                   │  │
 │  └──────────────────────┘    │  HTTP API → localhost:8890       │  │
 │                               │  MCP stdio → stdin/stdout        │  │
@@ -53,43 +53,222 @@ The backpack captures events **automatically** (no LLM decision needed) and prov
 ```
 L0 RAW          → Append-only event lake (JSONL)
 L1 WORKING      → Steps, facts, hot dialogue (Qdrant)
-L2 EPISODIC     → Grouped events, incidents (Qdrant)
-L3 SEMANTIC     → Decisions, entities, patterns (Qdrant + Engram files)
+L2 EPISODIC     → Grouped events, incidents (Qdrant + SQLite)
+L3 SEMANTIC     → Decisions, entities, patterns (Qdrant + filesystem)
 L4 CONSOLIDATED → Narratives, deep summaries (Qdrant)
-L5 CONTEXT      → Ephemeral context packs (vk-cache)
+L5 SELECTIVE    → Context routing and assembly
 ```
 
 ### What's Automatic vs What Needs Agent Judgment
 
 | Category | Trigger | Examples |
 |----------|---------|----------|
-| **AUTO** (plugin handles it) | Every user prompt, tool call, file edit, compaction | `automem_ingest_event`, `automem_heartbeat`, `conversation_store_save_conversation`, `autodream_consolidate` |
-| **LLM DECIDES** | Agent recognizes a decision, bugfix, or discovery | `automem_memorize`, `engram_save_decision`, `vk_cache_request_context` |
-| **USER ASKS** | Explicit user request | `health_check`, `*_status`, `*_delete_*`, `engram_search_decisions` |
+| **AUTO** (plugin handles it) | Every user prompt, tool call, file edit, compaction | `L0_capture_ingest_event`, `L0_capture_heartbeat`, `L2_conversations_save`, `L0_to_L4_consolidation_consolidate` |
+| **LLM DECIDES** | Agent recognizes a decision, bugfix, or discovery | `L0_capture_memorize`, `L3_decisions_save`, `L5_routing_request_context` |
+| **USER ASKS** | Explicit user request | `health_check`, `*_status`, `*_delete_*`, `L3_decisions_search` |
 
 ---
 
-## Project Evolution
+## Module Reference
 
-| Version | Milestone | What Changed |
-|---------|-----------|--------------|
-| **v0.1** | Proof of concept | Individual MCP servers (automem, autodream, etc.) running separately |
-| **v0.2** | Unified server | 7 servers consolidated into one `main.py` with dynamic module loading |
-| **v1.0** | MVP Release | 53 tools, 92% domain coverage, full sanitization, install script, benchmarks |
-| **v1.1** | Security audit | OWASP-grade input sanitization (652 lines), path confinement, threat model |
-| **v1.2** | **The Backpack** ⬅️ *current* | `backpack-orchestrator` plugin + HTTP API sidecar. Auto-triggers for ingest, heartbeat, consolidation, conversation save, commit enforcement |
+### L0_capture — Real-time Memory Ingestion (`L0_capture_*`)
 
-### v1.2 — The Backpack (Current)
+| Tool | Auto? | Description |
+|------|-------|-------------|
+| `L0_capture_heartbeat` | ✅ | Signal agent alive, track turns, pre-compute embeddings |
+| `L0_capture_ingest_event` | ✅ | Ingest raw L0 event (terminal, git, file, tool_call, user_prompt, file_edited) |
+| `L0_capture_memorize` | 🧠 | Store a memory requiring judgment (decision, bugfix, discovery, fact) |
+| `L0_capture_status` | 👤 | Show L0_capture daemon status |
 
-**The problem it solves**: 53 MCP tools existed but the agent never used them because everything required manual LLM decisions. The tools were passive — they only worked if the agent remembered to call them.
+### L0_to_L4_consolidation — Memory Consolidation (`L0_to_L4_consolidation_*`)
 
-**The solution**: Separate what's automatic from what needs judgment. The `backpack-orchestrator.ts` plugin handles all automatic operations via OpenCode hooks. The LLM only needs to decide on **decisions, bugfixes, and discoveries** — guided by an anti-rationalization table.
+| Tool | Auto? | Description |
+|------|-------|-------------|
+| `L0_to_L4_consolidation_heartbeat` | ✅ | Check consolidation thresholds (L1→L2→L3→L4) |
+| `L0_to_L4_consolidation_consolidate` | ✅ | Run consolidation across all layers |
+| `L0_to_L4_consolidation_dream` | ✅ | Trigger deep dream cycle (background pattern detection) |
+| `L0_to_L4_consolidation_dream_status` | 👤 | Check background dream task status |
+| `L0_to_L4_consolidation_force_promote` | 👤 | Force-promote memories between layers (debug) |
+| `L0_to_L4_consolidation_get_narrative` | 🧠 | Retrieve L4 consolidated memories |
+| `L0_to_L4_consolidation_get_semantic` | 🧠 | Retrieve L3 semantic memories |
+| `L0_to_L4_consolidation_status` | 👤 | Show L0_to_L4_consolidation daemon state |
 
-**Files added/changed in v1.2**:
-- `src/shared/api_server.py` — HTTP sidecar (localhost:8890) for plugin-to-server communication
-- `src/unified/server/main.py` — Starts HTTP sidecar alongside MCP stdio
-- `src/shared/sanitize.py` — Added `tool_call`, `user_prompt`, `file_edited` event types
-- Plugin: `~/.config/opencode/plugins/backpack-orchestrator.ts` — 6 auto-trigger hooks
+### L5_routing — Smart Context Retrieval (`L5_routing_*`)
+
+| Tool | Auto? | Description |
+|------|-------|-------------|
+| `L5_routing_request_context` | 🧠 | Smart context retrieval with intent classification |
+| `L5_routing_check_reminders` | ✅ | Check pending context reminders |
+| `L5_routing_push_reminder` | ✅ | Push a context reminder for later injection |
+| `L5_routing_detect_shift` | ✅ | Detect domain shift between queries |
+| `L5_routing_dismiss_reminder` | ⚙️ | Dismiss a reminder (internal) |
+| `L5_routing_status` | 👤 | Show L5_routing router status |
+
+### L2_conversations — Thread Persistence (`L2_conversations_*`)
+
+| Tool | Auto? | Description |
+|------|-------|-------------|
+| `L2_conversations_save` | ✅ | Save a conversation thread (auto on compaction) |
+| `L2_conversations_search` | 🧠 | Search past conversations by similarity |
+| `L2_conversations_get` | 🧠 | Retrieve a conversation by thread ID |
+| `L2_conversations_list_threads` | 👤 | List recent conversation threads |
+| `L2_conversations_status` | 👤 | Show conversation store status |
+
+### L3_facts — Semantic Memory (`L3_facts_*`)
+
+| Tool | Auto? | Description |
+|------|-------|-------------|
+| `L3_facts_add` | 🧠 | Add a semantic memory for a user |
+| `L3_facts_search` | 🧠 | Search semantic memories |
+| `L3_facts_list` | 👤 | List all memories for a user |
+| `L3_facts_delete` | 👤 | Delete a memory by ID |
+| `L3_facts_status` | 👤 | Show L3_facts status |
+
+### L3_decisions — Decision Memory & Vault (`L3_decisions_*`)
+
+| Tool | Auto? | Description |
+|------|-------|-------------|
+| `L3_decisions_save` | 🧠 | Save an architectural decision as Markdown |
+| `L3_decisions_search` | 🧠 | Search decisions by keyword |
+| `L3_decisions_get` | 🧠 | Get a specific decision by file path |
+| `L3_decisions_list` | 🧠 | List decisions with optional filtering |
+| `L3_decisions_delete` | 👤 | Delete a decision file |
+| `L3_decisions_vault_write` | 🧠 | Write a note to the Obsidian vault |
+| `L3_decisions_vault_read_note` | 🧠 | Read a vault note |
+| `L3_decisions_vault_list_notes` | 🧠 | List notes in a vault folder |
+| `L3_decisions_vault_process_inbox` | 👤 | Process vault inbox items |
+| `L3_decisions_vault_integrity_check` | 👤 | Verify vault consistency |
+| `L3_decisions_status` | 👤 | Show L3_decisions status |
+
+### Lx_reasoning — Sequential Thinking (`Lx_reasoning_*`)
+
+| Tool | Auto? | Description |
+|------|-------|-------------|
+| `Lx_reasoning_think` | 🧠 | Multi-step reasoning chain |
+| `Lx_reasoning_record_step` | 🧠 | Record a single thinking step |
+| `Lx_reasoning_create_plan` | 🧠 | Create an execution plan |
+| `Lx_reasoning_update_plan` | 🧠 | Update a plan step status |
+| `Lx_reasoning_reflect` | 🧠 | Reflect on reasoning quality |
+| `Lx_reasoning_propose_changes` | 🧠 | Propose a code change set |
+| `Lx_reasoning_apply_sandbox` | 🧠 | Apply changes in sandbox mode |
+| `Lx_reasoning_get_session` | 🧠 | Retrieve a thinking session |
+| `Lx_reasoning_list_sessions` | 👤 | List recent thinking sessions |
+| `Lx_reasoning_status` | 👤 | Show sequential thinking status |
+
+### Health
+
+| Tool | Description |
+|------|-------------|
+| `health_check` | Check health of all memory subsystems (Qdrant, embedding, collections, disk) |
+
+**Legend**: ✅ = auto-triggered by plugin | 🧠 = LLM decides when | 👤 = user-triggered | ⚙️ = internal
+
+---
+
+## Directory Structure
+
+```
+MCP-servers/agent-memory/
+├── bin/                          # Executables: qdrant, llama-server
+├── etc/                          # Config: .env, qdrant.yaml, mcp.json
+├── data/                         # ALL persistent memory
+│   ├── L0-sensory/              # events.jsonl
+│   ├── L1-working/              # agents/
+│   ├── L2-episodic/             # conversations.db
+│   ├── L3-semantic/             # decisions/, facts/
+│   ├── L4-narrative/            # consolidation-state.json
+│   ├── L5-selective/            # reminders/
+│   ├── Lx-deliberative/         # sessions/, plans/
+│   └── Lx-persistent/           # bilingual vault
+│       ├── ES/                  # Spanish (user writes in Obsidian)
+│       │   ├── Conocimiento/
+│       │   ├── Decisiones/
+│       │   ├── Notas/
+│       │   ├── Inbox/
+│       │   ├── Episodios/
+│       │   └── Entidades/
+│       ├── EN/                  # English (system copy)
+│       │   ├── knowledge/
+│       │   ├── decisions/
+│       │   ├── notes/
+│       │   ├── inbox/
+│       │   ├── episodes/
+│       │   └── entities/
+│       └── .system/             # counter.json
+├── qdrant/                      # Vector storage
+├── engine/                      # Compiled llama.cpp
+├── models/                      # GGUF: embeddings/, reasoning/
+├── logs/
+├── src/
+├── install/
+├── backups/
+└── .venv/
+```
+
+---
+
+## Vault Bilingual System
+
+The vault is a bilingual knowledge base that supports both Spanish (ES) and English (EN) versions of all notes.
+
+### File Format
+
+```
+L{layer}_{TYPE}_{YYYYMMDDTHHMMSS}_{NNNNN}_{lang}.md
+```
+
+**Example**: `L3_decision_20260103T143022_00001_EN.md`
+
+### Directory Structure
+
+- **ES/** (Spanish): User writes here in Obsidian
+- **EN/** (English): System maintains automatic copy
+- **.system/**: Internal metadata (counter.json)
+
+### Classification Tags
+
+| Tag | Destination Folder |
+|-----|-------------------|
+| `#decision` | Decisiones/ / decisions/ |
+| `#conocimiento` | Conocimiento/ / knowledge/ |
+| `#episodio` | Episodios/ / episodes/ |
+| `#entidad` | Entidades/ / entities/ |
+| `#nota` | Notas/ / notes/ |
+| **No tag** | Notas/ / notes/ (default) |
+
+### Auto-Serialization Daemon
+
+The vault processor (`vault_processor.py`) runs as a launchd service with WatchPaths monitoring. When you save a note in Obsidian (ES), it automatically:
+
+1. Detects file changes
+2. Extracts content and metadata
+3. Generates English translation (if needed)
+4. Creates/updates EN version
+5. Updates Qdrant embeddings
+6. Updates `.system/counter.json`
+
+---
+
+## Engine
+
+MCP-agent-memory uses **llama.cpp** compiled from source with Metal GPU support for fast, local inference.
+
+### Components
+
+- **Embedding Model**: bge-m3 (1024 dimensions)
+- **LLM**: qwen2.5-7b-instruct
+- **Backend**: llama.cpp with Metal acceleration
+- **Installation**: NO Homebrew dependencies — compiled from source
+
+### Compilation
+
+The installer automatically compiles llama.cpp with Metal support:
+
+```bash
+cd engine/llama.cpp
+cmake -DCMAKE_BUILD_TYPE=Release -DLLAMA_METAL=ON ..
+make -j$(sysctl -n hw.ncpu)
+```
 
 ---
 
@@ -107,6 +286,7 @@ The installer:
 5. Generates config (`.env` + directory structure)
 6. Auto-detects and configures MCP client (OpenCode, Claude Desktop, Pi)
 7. Runs verification (imports, connectivity, unit tests)
+8. Compiles llama.cpp engine with Metal support
 
 ### Post-Install: Enable the Backpack Plugin
 
@@ -122,7 +302,7 @@ Then restart OpenCode. The plugin auto-connects to the HTTP API on localhost:889
 
 ## Configuration
 
-### Environment Variables (`config/.env`)
+### Environment Variables (`etc/.env`)
 
 ```env
 QDRANT_URL=http://127.0.0.1:6333
@@ -160,105 +340,6 @@ AUTOMEM_API_PORT=8890              # HTTP sidecar port (default: 8890)
 
 ---
 
-## Tools Reference — 53 Tools
-
-### AutoMem — Real-time Memory Ingestion (`automem_*`)
-
-| Tool | Auto? | Description |
-|------|-------|-------------|
-| `automem_ingest_event` | ✅ | Ingest raw L0 event (terminal, git, file, tool_call, user_prompt, file_edited) |
-| `automem_heartbeat` | ✅ | Signal agent alive, track turns, pre-compute embeddings |
-| `automem_memorize` | 🧠 | Store a memory requiring judgment (decision, bugfix, discovery, fact) |
-| `automem_status` | 👤 | Show AutoMem daemon status |
-
-### AutoDream — Memory Consolidation (`autodream_*`)
-
-| Tool | Auto? | Description |
-|------|-------|-------------|
-| `autodream_heartbeat` | ✅ | Check consolidation thresholds (L1→L2→L3→L4) |
-| `autodream_consolidate` | ✅ | Run consolidation across all layers |
-| `autodream_dream` | ✅ | Trigger deep dream cycle (background pattern detection) |
-| `autodream_get_consolidated` | 🧠 | Retrieve L4 consolidated memories |
-| `autodream_get_semantic` | 🧠 | Retrieve L3 semantic memories |
-| `autodream_force_promote` | 👤 | Force-promote memories between layers (debug) |
-| `autodream_dream_status` | 👤 | Check background dream task status |
-| `autodream_status` | 👤 | Show AutoDream daemon state |
-
-### VK-Cache — Smart Context Retrieval (`vk_cache_*`)
-
-| Tool | Auto? | Description |
-|------|-------|-------------|
-| `vk_cache_request_context` | 🧠 | Smart context retrieval with intent classification |
-| `vk_cache_check_reminders` | ✅ | Check pending context reminders |
-| `vk_cache_push_reminder` | ✅ | Push a context reminder for later injection |
-| `vk_cache_detect_context_shift` | ✅ | Detect domain shift between queries |
-| `vk_cache_dismiss_reminder` | ⚙️ | Dismiss a reminder (internal) |
-| `vk_cache_status` | 👤 | Show VK-Cache router status |
-
-### Conversation Store (`conversation_store_*`)
-
-| Tool | Auto? | Description |
-|------|-------|-------------|
-| `conversation_store_save_conversation` | ✅ | Save a conversation thread (auto on compaction) |
-| `conversation_store_search_conversations` | 🧠 | Search past conversations by similarity |
-| `conversation_store_get_conversation` | 🧠 | Retrieve a conversation by thread ID |
-| `conversation_store_list_threads` | 👤 | List recent conversation threads |
-| `conversation_store_status` | 👤 | Show conversation store status |
-
-### Mem0 — Semantic Memory (`mem0_*`)
-
-| Tool | Auto? | Description |
-|------|-------|-------------|
-| `mem0_add_memory` | 🧠 | Add a semantic memory for a user |
-| `mem0_search_memory` | 🧠 | Search semantic memories |
-| `mem0_get_all_memories` | 👤 | List all memories for a user |
-| `mem0_delete_memory` | 👤 | Delete a memory by ID |
-| `mem0_status` | 👤 | Show mem0 status |
-
-### Engram — Decision Memory & Vault (`engram_*`)
-
-| Tool | Auto? | Description |
-|------|-------|-------------|
-| `engram_save_decision` | 🧠 | Save an architectural decision as Markdown |
-| `engram_search_decisions` | 🧠 | Search decisions by keyword |
-| `engram_get_decision` | 🧠 | Get a specific decision by file path |
-| `engram_list_decisions` | 🧠 | List decisions with optional filtering |
-| `engram_delete_decision` | 👤 | Delete a decision file |
-| `engram_vault_write` | 🧠 | Write a note to the Obsidian vault |
-| `engram_vault_read_note` | 🧠 | Read a vault note |
-| `engram_vault_list_notes` | 🧠 | List notes in a vault folder |
-| `engram_vault_process_inbox` | 👤 | Process vault inbox items |
-| `engram_vault_integrity_check` | 👤 | Verify vault consistency |
-| `engram_get_model_pack` | 🧠 | Read a model configuration pack |
-| `engram_set_model_pack` | 👤 | Create or update a model pack |
-| `engram_list_model_packs` | 👤 | List available model packs |
-| `engram_status` | 👤 | Show engram status |
-
-### Sequential Thinking (`sequential_thinking_*`)
-
-| Tool | Auto? | Description |
-|------|-------|-------------|
-| `sequential_thinking_sequential_thinking` | 🧠 | Multi-step reasoning chain |
-| `sequential_thinking_record_thought` | 🧠 | Record a single thinking step |
-| `sequential_thinking_create_plan` | 🧠 | Create an execution plan |
-| `sequential_thinking_update_plan_step` | 🧠 | Update a plan step status |
-| `sequential_thinking_reflect` | 🧠 | Reflect on reasoning quality |
-| `sequential_thinking_propose_change_set` | 🧠 | Propose a code change set |
-| `sequential_thinking_apply_sandbox` | 🧠 | Apply changes in sandbox mode |
-| `sequential_thinking_get_thinking_session` | 🧠 | Retrieve a thinking session |
-| `sequential_thinking_list_thinking_sessions` | 👤 | List recent thinking sessions |
-| `sequential_thinking_status` | 👤 | Show sequential thinking status |
-
-### Health
-
-| Tool | Description |
-|------|-------------|
-| `health_check` | Check health of all memory subsystems (Qdrant, embedding, collections, disk) |
-
-**Legend**: ✅ = auto-triggered by plugin | 🧠 = LLM decides when | 👤 = user-triggered | ⚙️ = internal
-
----
-
 ## HTTP API — Plugin Sidecar
 
 The MCP server exposes a lightweight HTTP API on port 8890 for plugin-to-server communication. This runs in a background thread alongside the MCP stdio server.
@@ -266,36 +347,11 @@ The MCP server exposes a lightweight HTTP API on port 8890 for plugin-to-server 
 | Method | Endpoint | Maps to MCP Tool |
 |--------|----------|-----------------|
 | GET | `/api/health` | Health check |
-| POST | `/api/ingest-event` | `automem_ingest_event` |
-| POST | `/api/heartbeat` | `automem_heartbeat` |
-| POST | `/api/heartbeat-dream` | `autodream_heartbeat` |
-| POST | `/api/save-conversation` | `conversation_store_save_conversation` |
-| POST | `/api/consolidate` | `autodream_consolidate` |
-
----
-
-## Project Structure
-
-```
-MCP-agent-memory/
-├── src/                          # Active source code
-│   ├── unified/server/main.py    # Entry point (MCP stdio + HTTP sidecar)
-│   ├── automem/                  # L0/L1 real-time memory
-│   ├── autodream/                # L1→L4 consolidation
-│   ├── vk-cache/                 # Smart context retrieval
-│   ├── conversation-store/       # Thread persistence
-│   ├── mem0/                     # Semantic memory CRUD
-│   ├── engram/                   # Decision memory + vault
-│   ├── sequential-thinking/      # Reasoning chains
-│   └── shared/                   # Config, embedding, sanitize, API server
-├── tests/                        # Test suite
-├── docs/                         # Documentation (see below)
-├── config/                       # .env template
-├── scripts/                      # Lifecycle, watchdog, Qdrant management
-├── bin/                          # Qdrant binary
-├── models/                       # GGUF models (BGE-M3, Qwen2.5)
-└── install.sh                    # 8-step installer
-```
+| POST | `/api/ingest-event` | `L0_capture_ingest_event` |
+| POST | `/api/heartbeat` | `L0_capture_heartbeat` |
+| POST | `/api/heartbeat-dream` | `L0_to_L4_consolidation_heartbeat` |
+| POST | `/api/save-conversation` | `L2_conversations_save` |
+| POST | `/api/consolidate` | `L0_to_L4_consolidation_consolidate` |
 
 ---
 
@@ -303,15 +359,50 @@ MCP-agent-memory/
 
 - **Input sanitization**: OWASP-grade — Unicode normalization, bidi stripping, invisible char removal, path traversal prevention (652 lines in `sanitize.py`)
 - **Filename validation**: OS-safe filenames, Windows reserved name checking
-- **Path confinement**: Engram decisions and vault restricted to project directories
+- **Path confinement**: L3_decisions and vault restricted to project directories
 - **Config validation**: URLs, backends, dimensions validated at startup
 - **HTTP API**: localhost only (127.0.0.1), no network exposure
+
+---
 
 ## Testing
 
 ```bash
 PYTHONPATH=src python -m pytest tests/ -v
 ```
+
+---
+
+## Version History
+
+| Version | Milestone | What Changed |
+|---------|-----------|--------------|
+| **v0.1** | Proof of concept | Individual servers running separately |
+| **v0.2** | Unified server | 7→1 consolidation with dynamic module loading |
+| **v1.0** | MVP Release | 53 tools, 92% domain coverage, full sanitization, benchmarks |
+| **v1.1** | Security audit | OWASP-grade input sanitization (652 lines), path confinement |
+| **v1.2** | The Backpack | `backpack-orchestrator` plugin + HTTP API sidecar. Auto-triggers |
+| **v2.0** | **Descriptive Naming** | Lx_NAME scheme, bilingual vault, compiled engine, modular installer |
+
+### v2.0 — Descriptive Naming (Current)
+
+**What changed**: Renamed all modules and tools to use the descriptive Lx_NAME scheme for clarity:
+
+- `automem` → `L0_capture_*`
+- `autodream` → `L0_to_L4_consolidation_*`
+- `vk_cache` → `L5_routing_*`
+- `conversation_store` → `L2_conversations_*`
+- `mem0` → `L3_facts_*`
+- `engram` → `L3_decisions_*`
+- `sequential_thinking` → `Lx_reasoning_*`
+
+**New features**:
+- Bilingual vault (ES/EN) with auto-translation
+- Compiled llama.cpp engine (no Homebrew dependencies)
+- Modular installer with engine compilation
+- Launchd services for vault processor and Qdrant watchdog
+
+---
 
 ## License
 

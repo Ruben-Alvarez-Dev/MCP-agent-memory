@@ -52,7 +52,7 @@ The plugin has NO direct access to MCP tools. It communicates via HTTP to the si
 | Ingest tool event | `POST /api/ingest-event` | Capture every tool call result |
 
 **Filtered tools** (skipped to avoid loops):
-- All `automem_*`, `autodream_*`, `engram_*`, `vk_cache_*`, `conversation_store_*`, `mem0_*`, `sequential_thinking_*`
+- All `L0_capture_**`, `L0_to_L4_consolidation_**`, `L3_decisions_**`, `L5_routing_**`, `L2_conversations_**`, `L3_facts_**`, `Lx_reasoning_**`
 - All Engram Go tools: `mem_save`, `mem_search`, etc.
 
 **Tested**: 37 cases (25 filtered + 12 pass through) — all correct.
@@ -93,9 +93,9 @@ Injects `BACKPACK_RULES` (~40 lines) instead of old `MEMORY_INSTRUCTIONS` (~120 
 | `src/unified/server/main.py` | +30 lines | Sidecar startup |
 | `src/shared/sanitize.py` | +1 line | New event types |
 
-## Relationship with engram.ts
+## Relationship with L3_decisions_*.ts
 
-Both plugins run simultaneously. The engram.ts was slimmed from 449 to 163 lines.
+Both plugins run simultaneously. The L3_decisions_*.ts was slimmed from 449 to 163 lines.
 
 | Concern | Handled by |
 |---------|-----------|
@@ -103,7 +103,7 @@ Both plugins run simultaneously. The engram.ts was slimmed from 449 to 163 lines
 | User prompt capture | backpack-orchestrator → MCP ingest + Engram Go |
 | Tool event capture | backpack-orchestrator → MCP ingest |
 | Compaction lifecycle | backpack-orchestrator (save + consolidate + context) |
-| Engram Go server lifecycle | engram.ts (start, session register, manifest import) |
+| Engram Go server lifecycle | L3_decisions_*.ts (start, session register, manifest import) |
 | Commit enforcement | backpack-orchestrator (`tool.execute.before`) |
 
 ## Audit Results (v1.2)

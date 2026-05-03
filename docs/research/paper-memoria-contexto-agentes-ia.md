@@ -279,7 +279,7 @@ La mayoría de los sistemas existentes cubren las primeras 5 fases. La **verific
 - No tiene freshness tracking ni verificación
 - Requiere Neo4j para grafo completo
 
-**Para nuestro caso de uso**: La operación `forget` y el auto-routing recall son patrones relevantes. El background sync es similar a nuestro autodream.
+**Para nuestro caso de uso**: La operación `forget` y el auto-routing recall son patrones relevantes. El background sync es similar a nuestro L0_to_L4_consolidation.
 
 #### 3.2.5 Zep / Graphiti — Context engineering con grafos temporales
 
@@ -329,7 +329,7 @@ La mayoría de los sistemas existentes cubren las primeras 5 fases. La **verific
 - Sin verificación de frescura
 - Escala pequeña (1.4K ⭐)
 
-**Para nuestro caso de uso**: El patrón hot-path/background es relevante — nuestro sistema usa un patrón similar (context injection en hot path, autodream consolidation en background).
+**Para nuestro caso de uso**: El patrón hot-path/background es relevante — nuestro sistema usa un patrón similar (context injection en hot path, L0_to_L4_consolidation consolidation en background).
 
 ---
 
@@ -350,7 +350,7 @@ El **Model Context Protocol** (MCP) es una especificación abierta que permite a
 |----------|---------------|--------|
 | **Supermemory MCP** | memory + recall + context | ✅ Activo, cloud |
 | **Zep MCP** | memory + search | ✅ Activo, cloud |
-| **MCP-agent-memory** (nuestro) | 53 tools: automem, vk-cache, engram, autodream, etc. | ✅ Activo, local-first |
+| **MCP-agent-memory** (nuestro) | 53 tools: L0_capture, L5_routing, engram, L0_to_L4_consolidation, etc. | ✅ Activo, local-first |
 | **mem0-cli** (como MCP) | add + search | ❌ No tiene MCP nativo |
 | **filesystem MCP** | read/write files | ✅ Estándar |
 | **git MCP** | git operations | ✅ Estándar |
@@ -465,12 +465,12 @@ MCP-agent-memory usa un enfoque que combina elementos de varias técnicas:
 | Característica | Fuente | En nuestro sistema |
 |----------------|--------|-------------------|
 | Multi-layer consolidation | MemGPT | L0→L1→L2→L3→L4 |
-| Smart retrieval | RAG + reranking | vk-cache con profiles |
+| Smart retrieval | RAG + reranking | L5_routing con profiles |
 | Freshness scoring | FreshQA | v1.4 (propuesto) |
 | Post-retrieval evaluation | CRAG | v1.4 (propuesto) |
 | Knowledge graph index | HippoRAG | Futuro (v2.x) |
 | Context injection | LangMem hot-path | v1.3 (implementado) |
-| Background consolidation | LangMem background | autodream (implementado) |
+| Background consolidation | LangMem background | L0_to_L4_consolidation (implementado) |
 
 ---
 
@@ -686,7 +686,7 @@ El protocolo MCP es el pegamento que permite que estas capas trabajen juntas. Lo
 
 | Feature | MCP-agent-memory | Supermemory | Mem0 | Letta | Cognee | Zep | LangMem | GraphRAG | LightRAG | HippoRAG |
 |---------|-----------------|-------------|------|-------|--------|-----|---------|----------|----------|----------|
-| Fact extraction | ✅ automem | ✅ auto | ✅ single-pass | ✅ agent-edited | ✅ 4 ops | ✅ auto | ✅ tools | ✅ pipeline | ✅ | ✅ OpenIE |
+| Fact extraction | ✅ L0_capture | ✅ auto | ✅ single-pass | ✅ agent-edited | ✅ 4 ops | ✅ auto | ✅ tools | ✅ pipeline | ✅ | ✅ OpenIE |
 | Vector search | ✅ Qdrant | ✅ propio | ✅ propio | ❌ | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ |
 | BM25 keyword | ✅ | ✅ | ✅ (new) | ❌ | ✅ | ✅ | ❌ | ❌ | ✅ | ❌ |
 | Entity linking | ❌ | ❌ | ✅ (new) | ❌ | ✅ | ✅ Graphiti | ❌ | ✅ | ✅ | ✅ |
