@@ -64,6 +64,13 @@ MAX_LOG_AGE_DAYS = 30
 class VaultManager:
     """Manages the Obsidian vault with atomic writes and integrity checks."""
 
+    FOLDER_MAP = {
+        "Inbox": "inbox", "Decisiones": "decisions", "Conocimiento": "knowledge",
+        "Episodios": "episodes", "Entidades": "entities", "Notas": "notes",
+        "Personas": "people", "Plantillas": "templates",
+    }
+    FOLDER_MAP_REVERSE = {v: k for k, v in FOLDER_MAP.items()}
+
     def __init__(self, Lx_persistent_path: Path | None = None):
         self.Lx_persistent_path = Lx_persistent_path or VAULT_PATH
         self._ensure_structure()
@@ -76,10 +83,17 @@ class VaultManager:
             self.Lx_persistent_path / "Decisiones",
             self.Lx_persistent_path / "Conocimiento",
             self.Lx_persistent_path / "Episodios",
-            self.Lx_persistent_path / "Log_Global",
             self.Lx_persistent_path / "Entidades",
+            self.Lx_persistent_path / "Notas",
             self.Lx_persistent_path / "Personas",
-            self.Lx_persistent_path / "Templates",
+            self.Lx_persistent_path / "Plantillas",
+            # EN (system copies)
+            self.Lx_persistent_path / "inbox",
+            self.Lx_persistent_path / "decisions",
+            self.Lx_persistent_path / "knowledge",
+            self.Lx_persistent_path / "episodes",
+            self.Lx_persistent_path / "entities",
+            self.Lx_persistent_path / "notes",
             SYSTEM_DIR,
             BACKUPS_DIR,
             LOCKS_DIR,
@@ -221,6 +235,39 @@ class VaultManager:
             self._release_lock(lock_path)
 
         return dest
+
+    # -- Bilingual Vault Methods --
+
+    def write_note_bilingual(self, folder, filename, data, author="system", en_content=None):
+        es_path = self.write_note(folder, filename, data, author)
+        en_folder = self.FOLDER_MAP.get(folder, folder.lower())
+        en_data = dict(data)
+        if en_content:
+            en_data["content"] = en_content
+        en_path = self.write_note(en_folder, filename, en_data, author)
+        return {"es": es_path, "en": en_path}
+
+    def read_note_user(self, folder, filename):
+        path = self.Lx_persistent_path / folder / filename
+        if path.exists():
+            return path.read_text(encoding="utf-8")
+        return None
+
+    def read_note_system(self, folder, filename):
+        en_folder = self.FOLDER_MAP.get(folder, folder.lower())
+        path = self.Lx_persistent_path / en_folder / filename
+        if path.exists():
+            return path.read_text(encoding="utf-8")
+        return None
+
+    def list_notes_bilingual(self, folder):
+        es_path = self.Lx_persistent_path / folder
+        en_folder = self.FOLDER_MAP.get(folder, folder.lower())
+        en_path = self.Lx_persistent_path / en_folder
+        es_notes = sorted([f.name for f in es_path.glob("*.md")]) if es_path.exists() else []
+        en_notes = sorted([f.name for f in en_path.glob("*.md")]) if en_path.exists() else []
+        return {"es": es_notes, "en": en_notes}
+
 
     # ── Inbox Processing ───────────────────────────────────────────
 
@@ -387,7 +434,9 @@ class VaultManager:
         # Scan actual files
         actual_files = {}
         for folder in ["Inbox", "Decisiones", "Conocimiento", "Episodios",
-                       "Log_Global", "Entidades", "Personas", "Templates"]:
+                       "Entidades", "Notas", "Personas", "Plantillas",
+                       "inbox", "decisions", "knowledge", "episodes",
+                       "entities", "notes"]:
             folder_path = self.Lx_persistent_path / folder
             if folder_path.exists():
                 for f in folder_path.rglob("*.md"):
@@ -483,7 +532,7 @@ class VaultManager:
         self._ensure_structure()
 
         # Fetch all points from Qdrant
-        collections = ["automem", "conversations", "mem0_memories"]
+        collections = ["L0_L4_memory", "L2_conversations", "L3_facts"]
 
         for collection in collections:
             try:
@@ -547,7 +596,7 @@ class VaultManager:
         if mem_type == "decision":
             return "Decisiones"
         elif layer == 0:
-            return "Log_Global"
+            return "Inbox"
         elif layer == 2:
             return "Episodios"
         elif layer == 3:
