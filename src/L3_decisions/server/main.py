@@ -12,8 +12,8 @@ from shared.sanitize import validate_save_decision, validate_vault_write, saniti
 from shared.result_models import SaveDecisionResult, DecisionListResult, VaultWriteResult, VaultIntegrityResult, VaultNotesResult, ModelPackResult, ModelPackListResult, EngramStatusResult
 
 config = Config.from_env()
-ENGRAM_PATH = Path(config.engram_path) if config.engram_path else Path("")
-VAULT_PATH = Path(config.vault_path) if config.vault_path else Path("")
+ENGRAM_PATH = Path(config.L3_decisions_path) if config.L3_decisions_path else Path("")
+VAULT_PATH = Path(config.Lx_persistent_path) if config.Lx_persistent_path else Path("")
 mcp = FastMCP("L3_decisions")
 
 def _files():
@@ -142,8 +142,8 @@ async def status() -> EngramStatusResult:
 def register_tools(target_mcp, _qdrant, target_config, prefix=""):
     global config, ENGRAM_PATH, VAULT_PATH
     config = target_config
-    ENGRAM_PATH = Path(config.engram_path) if config.engram_path else Path("")
-    VAULT_PATH = Path(config.vault_path) if config.vault_path else Path("")
+    ENGRAM_PATH = Path(config.L3_decisions_path) if config.L3_decisions_path else Path("")
+    VAULT_PATH = Path(config.Lx_persistent_path) if config.Lx_persistent_path else Path("")
     for fn in [save_decision,search_decisions,get_decision,list_decisions,delete_decision,vault_write,vault_process_inbox,vault_integrity_check,vault_list_notes,vault_read_note,get_model_pack,set_model_pack,list_model_packs,status]:
         target_mcp.add_tool(fn, name=f"{prefix}{fn.__name__}")
 

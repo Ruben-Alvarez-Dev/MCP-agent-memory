@@ -29,7 +29,7 @@ class Config:
 
     # ── Qdrant ────────────────────────────────────────────────
     qdrant_url: str = "http://127.0.0.1:6333"
-    qdrant_collection: str = "automem"
+    qdrant_collection: str = "L0_L4_memory"
 
     # ── Embedding ─────────────────────────────────────────────
     embedding_backend: str = "llama_server"
@@ -45,26 +45,26 @@ class Config:
     # ── Paths ─────────────────────────────────────────────────
     server_dir: str = ""
     data_dir: str = ""
-    vault_path: str = ""
-    engram_path: str = ""
-    dream_path: str = ""
-    thoughts_path: str = ""
-    heartbeats_path: str = ""
-    reminders_path: str = ""
-    staging_buffer_path: str = ""
-    raw_events_jsonl: str = ""
+    Lx_persistent_path: str = ""
+    L3_decisions_path: str = ""
+    L4_narrative_path: str = ""
+    Lx_deliberative_path: str = ""
+    L1_working_path: str = ""
+    L5_selective_path: str = ""
+    tmp_path: str = ""
+    L0_events_jsonl: str = ""
 
     # ── Scheduling ────────────────────────────────────────────
-    automem_promote_every: int = 10
-    dream_promote_l1: int = 10
-    dream_promote_l2: int = 3600
-    dream_promote_l3: int = 86400
-    dream_promote_l4: int = 604800
+    L0_capture_promote_every: int = 10
+    consolidation_promote_L1: int = 10
+    consolidation_promote_L2: int = 3600
+    consolidation_promote_L3: int = 86400
+    consolidation_promote_L4: int = 604800
 
     # ── vk-cache ──────────────────────────────────────────────
-    vk_min_score: float = 0.3
-    vk_max_items: int = 8
-    vk_max_tokens: int = 8000
+    L5_routing_min_score: float = 0.3
+    L5_routing_max_items: int = 8
+    L5_routing_max_tokens: int = 8000
 
     @classmethod
     def from_env(cls) -> Config:
@@ -78,7 +78,7 @@ class Config:
         return cls(
             # Qdrant
             qdrant_url=os.getenv("QDRANT_URL", "http://127.0.0.1:6333"),
-            qdrant_collection=os.getenv("QDRANT_COLLECTION", "automem"),
+            qdrant_collection=os.getenv("QDRANT_COLLECTION", "L0_L4_memory"),
             # Embedding
             embedding_backend=os.getenv("EMBEDDING_BACKEND", "llama_server"),
             embedding_dim=int(os.getenv("EMBEDDING_DIM", "1024")),
@@ -91,24 +91,24 @@ class Config:
             # Paths
             server_dir=server_dir,
             data_dir=os.getenv("DATA_DIR", os.path.join(server_dir, "data") if server_dir else ""),
-            vault_path=os.getenv("VAULT_PATH", os.path.join(server_dir, "vault") if server_dir else ""),
-            engram_path=os.getenv("ENGRAM_PATH", os.path.join(server_dir, "data", "memory", "engram") if server_dir else ""),
-            dream_path=os.getenv("DREAM_PATH", os.path.join(server_dir, "data", "memory", "dream") if server_dir else ""),
-            thoughts_path=os.getenv("THOUGHTS_PATH", os.path.join(server_dir, "data", "memory", "thoughts") if server_dir else ""),
-            heartbeats_path=os.getenv("HEARTBEATS_PATH", os.path.join(server_dir, "data", "memory", "heartbeats") if server_dir else ""),
-            reminders_path=os.getenv("REMINDERS_PATH", os.path.join(server_dir, "data", "memory", "reminders") if server_dir else ""),
-            staging_buffer_path=os.getenv("STAGING_BUFFER", os.path.join(server_dir, "data", "staging_buffer") if server_dir else ""),
-            raw_events_jsonl=os.getenv("AUTOMEM_JSONL", os.path.join(server_dir, "data", "raw_events.jsonl") if server_dir else ""),
+            Lx_persistent_path=os.getenv("VAULT_PATH", os.path.join(server_dir, "data", "Lx-persistent") if server_dir else ""),
+            L3_decisions_path=os.getenv("L3_DECISIONS_PATH", os.path.join(server_dir, "data", "L3-semantic", "decisions") if server_dir else ""),
+            L4_narrative_path=os.getenv("L4_NARRATIVE_PATH", os.path.join(server_dir, "data", "L4-narrative") if server_dir else ""),
+            Lx_deliberative_path=os.getenv("LX_DELIBERATIVE_PATH", os.path.join(server_dir, "data", "Lx-deliberative", "sessions") if server_dir else ""),
+            L1_working_path=os.getenv("L1_WORKING_PATH", os.path.join(server_dir, "data", "L1-working", "agents") if server_dir else ""),
+            L5_selective_path=os.getenv("L5_SELECTIVE_PATH", os.path.join(server_dir, "data", "L5-selective", "reminders") if server_dir else ""),
+            tmp_path=os.getenv("TMP_PATH", os.path.join(server_dir, "tmp") if server_dir else ""),
+            L0_events_jsonl=os.getenv("L0_EVENTS_PATH", os.path.join(server_dir, "data", "L0-sensory", "events.jsonl") if server_dir else ""),
             # Scheduling
-            automem_promote_every=int(os.getenv("AUTOMEM_PROMOTE_EVERY", "10")),
-            dream_promote_l1=int(os.getenv("DREAM_PROMOTE_L1", "10")),
-            dream_promote_l2=int(os.getenv("DREAM_PROMOTE_L2", "3600")),
-            dream_promote_l3=int(os.getenv("DREAM_PROMOTE_L3", "86400")),
-            dream_promote_l4=int(os.getenv("DREAM_PROMOTE_L4", "604800")),
+            L0_capture_promote_every=int(os.getenv("L0_CAPTURE_PROMOTE_EVERY", "10")),
+            consolidation_promote_L1=int(os.getenv("CONSOLIDATION_PROMOTE_L1", "10")),
+            consolidation_promote_L2=int(os.getenv("CONSOLIDATION_PROMOTE_L2", "3600")),
+            consolidation_promote_L3=int(os.getenv("CONSOLIDATION_PROMOTE_L3", "86400")),
+            consolidation_promote_L4=int(os.getenv("CONSOLIDATION_PROMOTE_L4", "604800")),
             # vk-cache
-            vk_min_score=float(os.getenv("VK_MIN_SCORE", "0.3")),
-            vk_max_items=int(os.getenv("VK_MAX_ITEMS", "8")),
-            vk_max_tokens=int(os.getenv("VK_MAX_TOKENS", "8000")),
+            L5_routing_min_score=float(os.getenv("L5_ROUTING_MIN_SCORE", "0.3")),
+            L5_routing_max_items=int(os.getenv("L5_ROUTING_MAX_ITEMS", "8")),
+            L5_routing_max_tokens=int(os.getenv("L5_ROUTING_MAX_TOKENS", "8000")),
         )
 
     def validate(self) -> list[str]:
@@ -143,8 +143,8 @@ class Config:
             errors.append(f"EMBEDDING_CACHE_SIZE must be >= 0, got {self.embedding_cache_size}")
 
         # vk-cache
-        if not (0 <= self.vk_min_score <= 1):
-            errors.append(f"VK_MIN_SCORE must be 0-1, got {self.vk_min_score}")
+        if not (0 <= self.L5_routing_min_score <= 1):
+            errors.append(f"L5_ROUTING_MIN_SCORE must be 0-1, got {self.L5_routing_min_score}")
 
         # Model path for llama_server backend
         if self.embedding_backend == "llama_server" and self.embedding_model:

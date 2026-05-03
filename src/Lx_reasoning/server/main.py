@@ -12,8 +12,8 @@ from shared.result_models import ThinkingResult, PlanResult, PlanUpdateResult, R
 from shared.sanitize import sanitize_text, sanitize_thread_id, validate_json_field, validate_propose_change
 
 config = Config.from_env()
-THOUGHTS_PATH = Path(config.thoughts_path) if config.thoughts_path else Path("")
-STAGING = Path(config.staging_buffer_path) if config.staging_buffer_path else Path("")
+THOUGHTS_PATH = Path(config.Lx_deliberative_path) if config.Lx_deliberative_path else Path("")
+STAGING = Path(config.tmp_path) if config.tmp_path else Path("")
 mcp = FastMCP("Lx_reasoning")
 
 def _save(sid, step, t):
@@ -168,8 +168,8 @@ async def status() -> SequentialThinkingStatusResult:
 def register_tools(target_mcp, _qdrant, target_config, prefix=""):
     global config, THOUGHTS_PATH, STAGING
     config = target_config
-    THOUGHTS_PATH = Path(config.thoughts_path) if config.thoughts_path else Path("")
-    STAGING = Path(config.staging_buffer_path) if config.staging_buffer_path else Path("")
+    THOUGHTS_PATH = Path(config.Lx_deliberative_path) if config.Lx_deliberative_path else Path("")
+    STAGING = Path(config.tmp_path) if config.tmp_path else Path("")
     for fn in [sequential_thinking,record_thought,create_plan,update_plan_step,reflect,get_thinking_session,list_thinking_sessions,propose_change_set,apply_sandbox,status]:
         target_mcp.add_tool(fn, name=f"{prefix}{fn.__name__}")
 

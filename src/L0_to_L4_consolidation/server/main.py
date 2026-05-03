@@ -20,7 +20,7 @@ from shared.result_models import HeartbeatResult, ConsolidateResult, DreamResult
 
 config = Config.from_env()
 qdrant = QdrantClient(config.qdrant_url, config.qdrant_collection, config.embedding_dim)
-DREAM_PATH = Path(config.dream_path) if config.dream_path else Path("")
+DREAM_PATH = Path(config.L4_narrative_path) if config.L4_narrative_path else Path("")
 _state_path = DREAM_PATH / "state.json"
 _state_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -50,7 +50,7 @@ async def _summarize(texts: list[str], prompt: str = "") -> str:
     return "\n".join(f"[{i+1}] {t[:200]}" for i, t in enumerate(texts[:10]))
 
 async def _promote_l1_l2(state: dict) -> str | None:
-    if state["turn_count"] - state.get("last_promote_l1_l2", 0) < config.dream_promote_l1:
+    if state["turn_count"] - state.get("last_promote_l1_l2", 0) < config.consolidation_promote_L1:
         return None
     await qdrant.ensure_collection(sparse=False)
     working = await qdrant.scroll({"must": [{"key": "layer", "match": {"value": 1}}]}, limit=100)
@@ -77,7 +77,7 @@ async def _promote_l1_l2(state: dict) -> str | None:
     return f"Created {len(episode_ids)} episodes" if episode_ids else None
 
 async def _promote_l2_l3(state: dict, now: float) -> str | None:
-    if now - state.get("last_promote_l2_l3", 0) < config.dream_promote_l2:
+    if now - state.get("last_promote_l2_l3", 0) < config.consolidation_promote_L2:
         return None
     await qdrant.ensure_collection(sparse=False)
     episodes = await qdrant.scroll({"must": [{"key": "layer", "match": {"value": 2}}]}, limit=50)
@@ -92,7 +92,7 @@ async def _promote_l2_l3(state: dict, now: float) -> str | None:
     return f"Consolidated {len(episodes)} episodes"
 
 async def _promote_l3_l4(state: dict, now: float) -> str | None:
-    if now - state.get("last_promote_l3_l4", 0) < config.dream_promote_l3:
+    if now - state.get("last_promote_l3_l4", 0) < config.consolidation_promote_L3:
         return None
     await qdrant.ensure_collection(sparse=False)
     semantic = await qdrant.scroll({"must": [{"key": "layer", "match": {"value": 3}}]}, limit=30)
@@ -257,9 +257,9 @@ async def dream() -> dict:
     state = _load_state()
     now = datetime.now(timezone.utc).timestamp()
     # Allow re-running by checking if explicitly forced (last_dream = 0 resets cooldown)
-    if now - state.get("last_dream", 0) < config.dream_promote_l4:
+    if now - state.get("last_dream", 0) < config.consolidation_promote_L4:
         # Reset so next call works
-        return {"status": "skipped", "reason": "not due yet (cooldown " + str(int(config.dream_promote_l4 - (now - state.get("last_dream", 0)))) + "s remaining)", "total_dreams": state.get("total_dreams", 0), "hint": "set last_dream=0 in state file to force"}
+        return {"status": "skipped", "reason": "not due yet (cooldown " + str(int(config.consolidation_promote_L4 - (now - state.get("last_dream", 0)))) + "s remaining)", "total_dreams": state.get("total_dreams", 0), "hint": "set last_dream=0 in state file to force"}
 
     async def _dream_impl():
         all_mem = []

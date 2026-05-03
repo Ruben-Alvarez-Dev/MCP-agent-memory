@@ -16,13 +16,13 @@ from shared.result_models import ContextPackResult, ReminderListResult, Reminder
 
 config = Config.from_env()
 qdrant = QdrantClient(config.qdrant_url, config.qdrant_collection, config.embedding_dim)
-_reminders_path = Path(config.reminders_path) if config.reminders_path else Path("")
-_reminders_path.mkdir(parents=True, exist_ok=True)
+_L5_selective_path = Path(config.L5_selective_path) if config.L5_selective_path else Path("")
+_L5_selective_path.mkdir(parents=True, exist_ok=True)
 mcp = FastMCP("L5_routing")
 
 def _estimate_tokens(t): return len(t) // 4
-def _save_reminder(r): (_reminders_path / f"{r.reminder_id}.json").write_text(r.model_dump_json(indent=2))
-def _get_reminders(aid): return [ContextReminder(**json.loads(f.read_text())) for f in _reminders_path.glob("*.json")]
+def _save_reminder(r): (_L5_selective_path / f"{r.reminder_id}.json").write_text(r.model_dump_json(indent=2))
+def _get_reminders(aid): return [ContextReminder(**json.loads(f.read_text())) for f in _L5_selective_path.glob("*.json")]
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def request_context(query: str, agent_id: str = "default", intent: str = "answer", token_budget: int = 8000, scopes: str = "", mode: str = "standard") -> ContextPackResult:
@@ -47,7 +47,7 @@ async def push_reminder(query: str, reason: str = "relevant_to_current_task", ag
     """System pushes a context reminder to the LLM."""
     clean = validate_push_reminder(query, agent_id)
     vector = await async_embed(clean["query"])
-    results = await qdrant.search(vector, limit=5, score_threshold=config.vk_min_score)
+    results = await qdrant.search(vector, limit=5, score_threshold=config.L5_routing_min_score)
     sources = [ContextSource(scope=f"{r.get('payload',{}).get('scope_type','')}/{r.get('payload',{}).get('scope_id','')}",layer=r.get("payload",{}).get("layer",0),mem_type=r.get("payload",{}).get("type",""),score=r.get("score",0),content_preview=r.get("payload",{}).get("content","")[:500]) for r in results]
     summary = "\n".join(f"[{s.layer}][{s.score:.2f}] {s.content_preview}" for s in sources) or "No context found"
     pack = ContextPack(request_id="",query=clean["query"],sources=sources,summary=summary,token_estimate=_estimate_tokens(summary),reason=reason)
@@ -58,7 +58,7 @@ async def push_reminder(query: str, reason: str = "relevant_to_current_task", ag
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
 async def dismiss_reminder(reminder_id: str) -> DismissResult:
     """Dismiss a reminder."""
-    path = _reminders_path / f"{reminder_id}.json"
+    path = _L5_selective_path / f"{reminder_id}.json"
     if path.exists(): path.unlink(); return DismissResult(status="dismissed", reminder_id=reminder_id)
     return DismissResult(status="not_found", reminder_id=reminder_id)
 
@@ -83,7 +83,7 @@ async def detect_context_shift(current_query: str, previous_query: str = "", age
 async def status() -> VkCacheStatusResult:
     """Show vk-cache router status."""
     q_ok = await qdrant.health()
-    return VkCacheStatusResult(daemon="vk-cache", status="RUNNING", qdrant="OK" if q_ok else "DOWN", active_reminders=len(list(_reminders_path.glob("*.json"))))
+    return VkCacheStatusResult(daemon="vk-cache", status="RUNNING", qdrant="OK" if q_ok else "DOWN", active_reminders=len(list(_L5_selective_path.glob("*.json"))))
 
 def register_tools(target_mcp, target_qdrant, target_config, prefix=""):
     global qdrant, config; qdrant = target_qdrant; config = target_config

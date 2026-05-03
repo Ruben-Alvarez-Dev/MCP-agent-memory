@@ -276,14 +276,14 @@ async def _retrieve_hybrid(
 
 
 async def _retrieve_engram(intent: QueryIntent, k: int) -> list[ContextItem]:
-    engram_path = Path(ENGRAM_PATH)
-    if not engram_path.exists():
+    L3_decisions_path = Path(ENGRAM_PATH)
+    if not L3_decisions_path.exists():
         return []
     results = []
     query_terms = set(w.lower() for w in intent.entities)
     if not query_terms:
         return []
-    for md_file in engram_path.rglob("*.md"):
+    for md_file in L3_decisions_path.rglob("*.md"):
         try:
             content = md_file.read_text()
             if any(word in content.lower() for word in query_terms):

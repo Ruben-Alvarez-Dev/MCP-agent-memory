@@ -64,22 +64,22 @@ MAX_LOG_AGE_DAYS = 30
 class VaultManager:
     """Manages the Obsidian vault with atomic writes and integrity checks."""
 
-    def __init__(self, vault_path: Path | None = None):
-        self.vault_path = vault_path or VAULT_PATH
+    def __init__(self, Lx_persistent_path: Path | None = None):
+        self.Lx_persistent_path = Lx_persistent_path or VAULT_PATH
         self._ensure_structure()
 
     def _ensure_structure(self):
         """Create vault structure if not exists."""
         dirs = [
-            self.vault_path,
-            self.vault_path / "Inbox",
-            self.vault_path / "Decisiones",
-            self.vault_path / "Conocimiento",
-            self.vault_path / "Episodios",
-            self.vault_path / "Log_Global",
-            self.vault_path / "Entidades",
-            self.vault_path / "Personas",
-            self.vault_path / "Templates",
+            self.Lx_persistent_path,
+            self.Lx_persistent_path / "Inbox",
+            self.Lx_persistent_path / "Decisiones",
+            self.Lx_persistent_path / "Conocimiento",
+            self.Lx_persistent_path / "Episodios",
+            self.Lx_persistent_path / "Log_Global",
+            self.Lx_persistent_path / "Entidades",
+            self.Lx_persistent_path / "Personas",
+            self.Lx_persistent_path / "Templates",
             SYSTEM_DIR,
             BACKUPS_DIR,
             LOCKS_DIR,
@@ -112,7 +112,7 @@ class VaultManager:
         Returns:
             Path to the written file.
         """
-        dest = self.vault_path / folder / filename
+        dest = self.Lx_persistent_path / folder / filename
 
         # Check if file is human-authored
         if dest.exists() and not allow_overwrite_human:
@@ -121,7 +121,7 @@ class VaultManager:
                 # Write as .system-note instead
                 note_name = Path(filename).stem
                 note_ext = Path(filename).suffix
-                dest = self.vault_path / folder / f"{note_name}.system-note{note_ext}"
+                dest = self.Lx_persistent_path / folder / f"{note_name}.system-note{note_ext}"
 
         # Ensure folder exists
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -177,7 +177,7 @@ class VaultManager:
         author: str = "system",
     ) -> Path:
         """Append content to an existing note atomically."""
-        dest = self.vault_path / folder / filename
+        dest = self.Lx_persistent_path / folder / filename
 
         if not dest.exists():
             return self.write_note(folder, filename, {"content": content}, author)
@@ -187,7 +187,7 @@ class VaultManager:
         if frontmatter and frontmatter.get("author") == "human":
             # Write as .system-note
             note_name = Path(filename).stem
-            dest = self.vault_path / folder / f"{note_name}.system-note{Path(filename).suffix}"
+            dest = self.Lx_persistent_path / folder / f"{note_name}.system-note{Path(filename).suffix}"
             return self.write_note(folder, f"{note_name}.system-note{Path(filename).suffix}",
                                    {"content": content}, author)
 
@@ -229,7 +229,7 @@ class VaultManager:
 
         Returns list of processed items.
         """
-        inbox = self.vault_path / "Inbox"
+        inbox = self.Lx_persistent_path / "Inbox"
         processed = []
 
         for note_file in sorted(inbox.glob("*.md")):
@@ -263,7 +263,7 @@ class VaultManager:
                 dest_name = classification.get("filename", note_file.name)
 
                 # Check if destination already exists
-                dest = self.vault_path / folder / dest_name
+                dest = self.Lx_persistent_path / folder / dest_name
                 if dest.exists():
                     # Append as system-note
                     self.append_note(folder, dest_name, body, "system")
@@ -388,10 +388,10 @@ class VaultManager:
         actual_files = {}
         for folder in ["Inbox", "Decisiones", "Conocimiento", "Episodios",
                        "Log_Global", "Entidades", "Personas", "Templates"]:
-            folder_path = self.vault_path / folder
+            folder_path = self.Lx_persistent_path / folder
             if folder_path.exists():
                 for f in folder_path.rglob("*.md"):
-                    rel = str(f.relative_to(self.vault_path))
+                    rel = str(f.relative_to(self.Lx_persistent_path))
                     actual_files[rel] = f
 
         report["files_expected"] = len(manifest)
@@ -441,7 +441,7 @@ class VaultManager:
                 links = re.findall(r'\[\[([^\]]+)\]\]', content)
                 for link in links:
                     # Check if target exists
-                    target = self.vault_path / f"{link}.md"
+                    target = self.Lx_persistent_path / f"{link}.md"
                     if not target.exists():
                         report["broken_links"].append({
                             "source": rel_path,
@@ -472,9 +472,9 @@ class VaultManager:
         # Move current vault to trash
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         trash_backup = TRASH_DIR / f"pre-rebuild-{timestamp}"
-        if self.vault_path.exists():
+        if self.Lx_persistent_path.exists():
             trash_backup.mkdir(parents=True, exist_ok=True)
-            for item in self.vault_path.iterdir():
+            for item in self.Lx_persistent_path.iterdir():
                 if item.name == ".system":
                     continue
                 item.rename(trash_backup / item.name)
@@ -664,7 +664,7 @@ class VaultManager:
         for backup_dir in backups:
             backup_file = backup_dir / file_name
             if backup_file.exists():
-                dest = self.vault_path / rel_path
+                dest = self.Lx_persistent_path / rel_path
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(str(backup_file), str(dest))
                 self._update_checksum(dest)
@@ -689,7 +689,7 @@ class VaultManager:
         if not path.exists():
             return
         checksums = self._load_checksums()
-        rel_path = str(path.relative_to(self.vault_path))
+        rel_path = str(path.relative_to(self.Lx_persistent_path))
         checksums[rel_path] = self._sha256(path)
         self._save_checksums(checksums)
 

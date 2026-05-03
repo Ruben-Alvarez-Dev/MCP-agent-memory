@@ -22,9 +22,9 @@ from shared.result_models import MemorizeResult, IngestResult, HeartbeatResult, 
 
 config = Config.from_env()
 qdrant = QdrantClient(config.qdrant_url, config.qdrant_collection, config.embedding_dim)
-JSONL_PATH = config.raw_events_jsonl
-PROMOTION_INTERVAL = config.automem_promote_every
-STAGING_BUFFER = Path(config.staging_buffer_path) if config.staging_buffer_path else Path("")
+JSONL_PATH = config.L0_events_jsonl
+PROMOTION_INTERVAL = config.L0_capture_promote_every
+STAGING_BUFFER = Path(config.tmp_path) if config.tmp_path else Path("")
 
 mcp = FastMCP("L0_capture")
 
@@ -110,7 +110,7 @@ async def heartbeat(agent_id: str, session_id: str = "", turn_count: int = 0, pr
             pass  # Prefetch is best-effort
     
     status = HeartbeatStatus(agent_id=agent_id, session_id=session_id, turn_count=turn_count, status="active")
-    hb_dir = Path(config.heartbeats_path)
+    hb_dir = Path(config.L1_working_path)
     hb_dir.mkdir(parents=True, exist_ok=True)
     (hb_dir / f"{agent_id}.json").write_text(status.model_dump_json(indent=2))
     promote_due = turn_count > 0 and turn_count % PROMOTION_INTERVAL == 0
@@ -129,7 +129,7 @@ async def status() -> AutoMemStatusResult:
     raw_events = sum(1 for _ in open(JSONL_PATH)) if Path(JSONL_PATH).exists() else 0
     memory_count = await qdrant.count() if qdrant_ok else 0
     staging = sum(1 for _ in STAGING_BUFFER.glob("*.json")) if STAGING_BUFFER.exists() else 0
-    return AutoMemStatusResult(daemon="AutoMem", status="RUNNING", qdrant="OK" if qdrant_ok else "DOWN", llama_cpp="OK" if llama_ok else "NOT_INSTALLED", raw_events_jsonl=raw_events, stored_memories=memory_count, staged_change_sets=staging)
+    return AutoMemStatusResult(daemon="AutoMem", status="RUNNING", qdrant="OK" if qdrant_ok else "DOWN", llama_cpp="OK" if llama_ok else "NOT_INSTALLED", L0_events_jsonl=raw_events, stored_memories=memory_count, staged_change_sets=staging)
 
 
 def register_tools(target_mcp: FastMCP, target_qdrant: QdrantClient, target_config: Config, prefix: str = "") -> None:

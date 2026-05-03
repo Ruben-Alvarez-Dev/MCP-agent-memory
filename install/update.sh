@@ -33,11 +33,11 @@ if [ -d "$SOURCE_DIR/install" ]; then
   done
   echo "  Updated install/"
 fi
-echo "  Preserved: data/, vault/, models/, engine/"
+echo "  Preserved: data/, Lx-persistent/, models/, engine/"
 
 echo "=== Step 5: Merge config ==="
-if [ -f "$INSTALL_DIR/config/.env" ]; then
-  EXISTING=$(grep -c = "$INSTALL_DIR/config/.env" 2>/dev/null || echo 0)
+if [ -f "$INSTALL_DIR/etc/.env" ]; then
+  EXISTING=$(grep -c = "$INSTALL_DIR/etc/.env" 2>/dev/null || echo 0)
   echo "  Preserved .env ($EXISTING vars)"
 else
   bash $SCRIPT_DIR/config.sh $INSTALL_DIR

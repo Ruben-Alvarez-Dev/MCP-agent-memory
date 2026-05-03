@@ -94,13 +94,13 @@ async def _ensure_initialized() -> None:
     # 1. Create all data directories
     dirs = [
         config.data_dir,
-        config.engram_path,
-        config.dream_path,
-        config.thoughts_path,
-        config.heartbeats_path,
-        config.reminders_path,
-        config.staging_buffer_path,
-        config.vault_path,
+        config.L3_decisions_path,
+        config.L4_narrative_path,
+        config.Lx_deliberative_path,
+        config.L1_working_path,
+        config.L5_selective_path,
+        config.tmp_path,
+        config.Lx_persistent_path,
     ]
     for d in dirs:
         if d:
@@ -122,13 +122,13 @@ async def _ensure_initialized() -> None:
 
     # 3. Create engram subdirs
     for sub in ["general", "project", "personal", "model-packs"]:
-        p = Path(config.engram_path) / sub if config.engram_path else None
+        p = Path(config.L3_decisions_path) / sub if config.L3_decisions_path else None
         if p:
             p.mkdir(parents=True, exist_ok=True)
 
     # 4. Create vault folders
     for folder in ["Inbox", "Decisiones", "Conocimiento", "Episodios", "Entidades", "Notes"]:
-        p = Path(config.vault_path) / folder if config.vault_path else None
+        p = Path(config.Lx_persistent_path) / folder if config.Lx_persistent_path else None
         if p:
             p.mkdir(parents=True, exist_ok=True)
 

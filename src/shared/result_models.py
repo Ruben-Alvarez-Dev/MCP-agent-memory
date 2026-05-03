@@ -35,7 +35,7 @@ class AutoMemStatusResult(BaseModel):
     status: str = "RUNNING"
     qdrant: str = "OK"
     llama_cpp: str = "OK"
-    raw_events_jsonl: int = 0
+    L0_events_jsonl: int = 0
     stored_memories: int = 0
     staged_change_sets: int = 0
 
