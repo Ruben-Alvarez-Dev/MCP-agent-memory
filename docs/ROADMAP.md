@@ -154,7 +154,7 @@ v1.4 gave the agent knowledge verification. v1.5 makes the agent **safe**. Six e
 
 **Problem**: We capture 3600+ raw events but they pile up without structure. `MemoryType.ENTITY` and `MemoryType.RELATION` are defined in the enum but have NO logic. `mem_timeline` exists in Engram Go but isn't integrated into our Python pipeline. There is no entity graph, no lifecycle tracking, no temporal ordering that connects events to the entities they affect.
 
-**Solution**: Build the timeline as the backbone — the "guide rope" (cuerda guía) that threads through everything.
+**Solution**: Build the timeline as the backbone — the "guide rope" that threads through everything.
 
 **What exists but is dormant**:
 - `MemoryType.ENTITY` / `MemoryType.RELATION` — in enum, no logic
