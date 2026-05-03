@@ -246,12 +246,14 @@ class VaultManager:
     # -- Bilingual Vault Methods --
 
     def write_note_bilingual(self, folder, filename, data, author="system", en_content=None):
-        es_path = self.write_note(folder, filename, data, author)
+        es_filename = self._generate_vault_filename(folder, "ES")
+        es_path = self.write_note(folder, es_filename, data, author)
         en_folder = self.FOLDER_MAP.get(folder, folder.lower())
         en_data = dict(data)
         if en_content:
             en_data["content"] = en_content
-        en_path = self.write_note(en_folder, filename, en_data, author)
+        en_filename = self._generate_vault_filename(en_folder, "EN")
+        en_path = self.write_note(en_folder, en_filename, en_data, author)
         return {"es": es_path, "en": en_path}
 
     def read_note_user(self, folder, filename):
@@ -625,26 +627,26 @@ class VaultManager:
             counters = _json.loads(counter_path.read_text())
         else:
             counters = {"next": {}}
-        key = "Lx" if layer == "Lx" else "L" + str(layer)
+        key = layer
         current = counters.get("next", {}).get(key, 1)
         counters.setdefault("next", {})[key] = current + 1
         counter_path.parent.mkdir(parents=True, exist_ok=True)
         counter_path.write_text(_json.dumps(counters, indent=2))
         return current
 
-    def _generate_vault_filename(self, folder: str) -> str:
+    def _generate_vault_filename(self, folder: str, lang: str = 'ES') -> str:
         layer_map = {
             "Inbox": "L0", "Decisiones": "L3", "Conocimiento": "L3",
-            "Episodios": "L2", "Entidades": "L3", "Notas": "Lx",
-            "Personas": "Lx", "Plantillas": "Lx",
+            "Episodios": "L2", "Entidades": "L3", "Notas": "L3",
+            "Personas": "L3", "Plantillas": "L3",
             "inbox": "L0", "decisions": "L3", "knowledge": "L3",
-            "episodes": "L2", "entities": "L3", "notes": "Lx",
-            "people": "Lx", "templates": "Lx",
+            "episodes": "L2", "entities": "L3", "notes": "L3",
+            "people": "L3", "templates": "L3",
         }
         layer = layer_map.get(folder, "Lx")
         type_code = self.TYPE_CODES.get(folder, "NOTE")
         seq = self._next_id(layer)
-        return "{}_{:04d}.md".format(layer + "_" + type_code, seq)
+        return "{}_{:05d}.md".format(layer + "_" + type_code, seq)
 
     def _render_note(self, data: dict, author: str) -> str:
         """Render a note with YAML frontmatter."""
