@@ -8,18 +8,18 @@
 
 **Status**: ✅ Shipped (superseded by v1.4)
 
-v1.2 proved the sidecar pattern. v1.3 closes the loop: Capture → Store → Consolidate → **Retrieve → Inject**. On every user prompt, the plugin fetches relevant context from vk-cache and injects it into the system prompt. The agent starts every conversation aware of relevant past work.
+v1.2 proved the sidecar pattern. v1.3 closes the loop: Capture → Store → Consolidate → **Retrieve → Inject**. On every user prompt, the plugin fetches relevant context from L5_routing and injects it into the system prompt. The agent starts every conversation aware of relevant past work.
 
 Plus: **code-based enforcement** instead of text rules. The plugin blocks `write`/`edit` tools until memory context has been fetched for the session. No more "please remember to check memory" — it's enforced by code.
 
 **What's proven**:
-- `/api/request-context` endpoint proxies vk_cache.request_context via HTTP
+- `/api/request-context` endpoint proxies L5_routing.request_context via HTTP
 - Context injection via `system.transform` hook (two-hook pattern with `chat.message`)
 - 30-second cooldown on context fetches, 2000 token budget
 - Enforcement gate: `write`/`edit` blocked without context verification
 - Graceful degradation: if context fetch fails, agent proceeds after first attempt
 
-**Research foundation**: See `docs/research/verificacion-continua-conocimiento.md` for the scientific basis.
+**Research foundation**: See `docs/research/continuous-knowledge-verification.md` for the scientific basis.
 
 ---
 
@@ -36,7 +36,7 @@ v1.3 gave the agent context from memory. v1.4 makes the agent know **which conte
 - Context injection shows freshness tags: `✅ VERIFIED 2h ago`, `⚠️ STALE`, `❓ NEVER VERIFIED`, `🔒 UNVERIFIABLE`
 - New endpoint: `POST /api/verify-memories` — verify specific memories or auto-discover stale ones
 - Background verification: `session.idle` hook triggers verification of stale memories
-- Dream cycle integration: `autodream.consolidate()` runs `_verify_stale()` during each consolidation pass
+- Dream cycle integration: `L0_to_L4_consolidation.consolidate()` runs `_verify_stale()` during each consolidation pass
 
 **Deliverables**:
 - [x] Extend `MemoryItem` with `verified_at`, `verification_status`, `change_speed`, `verification_source`
@@ -44,7 +44,7 @@ v1.3 gave the agent context from memory. v1.4 makes the agent know **which conte
 - [x] Context injection shows freshness tags: `✅ VERIFIED 2h ago`, `⚠️ STALE 5d ago`, `❓ NEVER VERIFIED`
 - [x] New endpoint: `POST /api/verify-memories` — verify specific memories against source of truth
 - [x] Background verification: `session.idle` hook triggers verification of stale memories
-- [x] Dream cycle integration: autodream verifies stale memories during consolidation
+- [x] Dream cycle integration: L0_to_L4_consolidation verifies stale memories during consolidation
 
 **Scientific basis**:
 - Reconsolidation (Nader 2000): every recall is a verification opportunity
@@ -55,7 +55,7 @@ v1.3 gave the agent context from memory. v1.4 makes the agent know **which conte
 
 **Why this matters**: Without freshness tracking, the context injection from v1.3 can be counterproductive — injecting confident but wrong data. v1.4 ensures the agent knows **which memories to trust** and which need verification.
 
-**Full research**: `docs/research/verificacion-continua-conocimiento.md`
+**Full research**: `docs/research/continuous-knowledge-verification.md`
 
 ---
 
@@ -98,7 +98,7 @@ v1.4 gave the agent knowledge verification. v1.5 makes the agent **safe**. Six e
 
 **Status**: 📋 Planned (PREREQUISITE for v1.6.1 Timeline)
 
-**Problem**: Conversations are NOT being saved integrally. `conversation_store` fails silently ("All connection attempts failed"). `raw_events.jsonl` captures isolated events, not full threads. Engram Go captures prompts but not full responses or tool outputs. We are losing the PRIMARY source of truth — the actual conversations.
+**Problem**: Conversations are NOT being saved integrally. `L2_conversations` fails silently ("All connection attempts failed"). `raw_events.jsonl` captures isolated events, not full threads. Engram Go captures prompts but not full responses or tool outputs. We are losing the PRIMARY source of truth — the actual conversations.
 
 **Solution**: Every conversation thread must be serialized IN FULL with structured metadata.
 
@@ -116,7 +116,7 @@ v1.4 gave the agent knowledge verification. v1.5 makes the agent **safe**. Six e
 | summary | Semantic metadata for search |
 
 **Deliverables**:
-- [ ] Fix `conversation_store` — stop failing silently
+- [ ] Fix `L2_conversations` — stop failing silently
 - [ ] Serialize full message threads (not summaries, not samples — COMPLETE)
 - [ ] Attach metadata: agent, tool, user, machine, environment per message
 - [ ] Storage format: JSONL or SQLite — whatever preserves integrity
@@ -133,7 +133,7 @@ v1.4 gave the agent knowledge verification. v1.5 makes the agent **safe**. Six e
 
 **Status**: 📋 Planned
 
-**Problem**: Qwen 2.5/3.5/3.6 offer 1M token context windows but require KV cache quantization to be practical. Current vk-cache pipeline doesn't account for this. Without quantization, these models OOM on consumer hardware.
+**Problem**: Qwen 2.5/3.5/3.6 offer 1M token context windows but require KV cache quantization to be practical. Current L5_routing pipeline doesn't account for this. Without quantization, these models OOM on consumer hardware.
 
 **Solution**: Externalize KV cache via vLLM with NVMe offloading. Keep the "hot" portion in RAM, page the "raw memory bucket" to NVMe transparently.
 
@@ -143,7 +143,7 @@ v1.4 gave the agent knowledge verification. v1.5 makes the agent **safe**. Six e
 - [ ] Research: quantization formats compatible with Qwen 1M context (GPTQ, AWQ, GGUF quirks)
 - [ ] PoC: vLLM with KV cache offloading to NVMe
 - [ ] Benchmark: RAM usage before/after, latency impact
-- [ ] vk-cache pipeline adaptation: serve paginated context to coordinator model
+- [ ] L5_routing pipeline adaptation: serve paginated context to coordinator model
 - [ ] Config: NVMe path, hot/cold ratio, page size tunables
 
 ---
@@ -268,12 +268,12 @@ CLI-agent-memory  ← active orchestration layer (the tractor head)
         │
         ├── MCP-agent-memory  ← passive memory services (53 tools)
         │     ├── automem (events + working memory)
-        │     ├── autodream (consolidation + dreams)
-        │     ├── vk-cache (smart retrieval + freshness scoring)
-        │     ├── conversation-store (threads)
+        │     ├── L0_to_L4_consolidation (consolidation + dreams)
+        │     ├── L5_routing (smart retrieval + freshness scoring)
+        │     ├── L2_conversations (threads)
         │     ├── mem0 (semantic CRUD)
         │     ├── engram (decisions + vault)
-        │     └── sequential-thinking (reasoning)
+        │     └── Lx_reasoning (reasoning)
         │
         ├── agent-search  ← codebase indexing + semantic search
         │

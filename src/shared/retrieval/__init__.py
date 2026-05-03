@@ -29,9 +29,9 @@ from .repo_map import get_repo_map
 # ── Configuration ──────────────────────────────────────────────────
 
 QDRANT_URL = os.getenv("QDRANT_URL", "http://127.0.0.1:6333")
-QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "automem")
-CONV_COLLECTION = os.getenv("CONV_COLLECTION", "conversations")
-MEM0_COLLECTION = os.getenv("MEM0_COLLECTION", "mem0_memories")
+QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "L0_L4_memory")
+CONV_COLLECTION = os.getenv("CONV_COLLECTION", "L2_conversations")
+MEM0_COLLECTION = os.getenv("MEM0_COLLECTION", "L3_facts")
 _MSD = os.getenv("MEMORY_SERVER_DIR", "")
 ENGRAM_PATH = os.getenv(
     "ENGRAM_PATH",

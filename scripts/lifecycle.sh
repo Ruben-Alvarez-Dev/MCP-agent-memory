@@ -107,7 +107,7 @@ if $STATUS_ONLY; then
     fi
     
     # Engram
-    ENG="$DATA_DIR/memory/engram"
+    ENG="$DATA_DIR/memory/L3_decisions"
     if [ -d "$ENG" ]; then
         COUNT=$(find "$ENG" -name "*.json" -o -name "*.yaml" 2>/dev/null | wc -l | tr -d ' ')
         SIZE=$(du -sh "$ENG" 2>/dev/null | cut -f1 | tr -d ' ')
@@ -319,7 +319,7 @@ dry = $( [ "$DRY_RUN" = true ] && echo 'True' || echo 'False' )
 now = time.time()
 total_purged = 0
 
-for col in ['automem', 'mem0_memories', 'conversations']:
+for col in ['L0_L4_memory', 'L3_facts', 'L2_conversations']:
     try:
         # Scroll points with layer info
         body = json.dumps({'limit': 100, 'with_payload': True}).encode()

@@ -39,7 +39,7 @@ status_qdrant() {
 }
 
 create_collections() {
-    for col in automem conversations mem0_memories; do
+    for col in L0_L4_memory L2_conversations L3_facts; do
         curl -s -X PUT "http://127.0.0.1:$QDRANT_PORT/collections/$col" \
             -H "Content-Type: application/json" \
             -d '{"vectors":{"size":1024,"distance":"Cosine"},"sparse_vectors":{"text":{"index":{"type":"bm25"}}}}' \

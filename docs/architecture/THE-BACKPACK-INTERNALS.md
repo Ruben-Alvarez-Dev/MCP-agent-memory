@@ -100,7 +100,7 @@
   │  │   └── ...                                      │
   │  │                                                │
   │  └── Lx_reasoning (7 tools)                        │
-  │      ├── sequential_thinking                      │
+  │      ├── Lx_reasoning                      │
   │      ├── create_plan / update_plan_step           │
   │      ├── propose_change_set                       │
   │      └── ...                                      │

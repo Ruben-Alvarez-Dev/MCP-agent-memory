@@ -18,7 +18,7 @@ from shared.retrieval.code_map import generate_code_map, format_map_text
 
 
 QDRANT_URL = os.getenv("QDRANT_URL", "http://127.0.0.1:6333")
-QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "automem")
+QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "L0_L4_memory")
 SUPPORTED_SUFFIXES = {
     ".py", ".ts", ".tsx", ".js", ".jsx", ".mjs",
     ".go", ".rs", ".java", ".kt", ".c", ".h", ".cpp", ".hpp",

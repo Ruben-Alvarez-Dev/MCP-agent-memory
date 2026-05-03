@@ -28,7 +28,7 @@ from shared.result_models import SaveConversationResult, SearchResult, ThreadLis
 logger = logging.getLogger(__name__)
 
 config = Config.from_env()
-qdrant = QdrantClient(config.qdrant_url, "conversations", config.embedding_dim)
+qdrant = QdrantClient(config.qdrant_url, "L2_conversations", config.embedding_dim)
 mcp = FastMCP("L2_conversations")
 
 
@@ -202,7 +202,7 @@ async def status() -> ConversationStatusResult:
 
 def register_tools(target_mcp, target_qdrant, target_config, prefix=""):
     global qdrant, config
-    qdrant = QdrantClient(target_config.qdrant_url, "conversations", target_config.embedding_dim)
+    qdrant = QdrantClient(target_config.qdrant_url, "L2_conversations", target_config.embedding_dim)
     config = target_config
     for fn in [save_conversation, get_conversation, search_conversations, list_threads, status]:
         target_mcp.add_tool(fn, name=f"{prefix}{fn.__name__}")

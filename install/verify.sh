@@ -15,7 +15,7 @@ echo "── Verification ──────────────────
 
 # 1. File structure
 echo "  [Files]"
-for mod in automem autodream vk-cache conversation-store mem0 engram sequential-thinking; do
+for mod in L0_capture L0_to_L4_consolidation L5_routing L2_conversations L3_facts L3_decisions Lx_reasoning; do
     check "$INSTALL_DIR/src/$mod/server/main.py" "src/$mod/server/main.py"
 done
 check "$INSTALL_DIR/src/unified/server/main.py" "unified server"
@@ -46,7 +46,7 @@ check_url "http://127.0.0.1:$LLAMA_PORT/health" "llama-server (port $LLAMA_PORT)
 
 # 5. Qdrant collections
 echo "  [Qdrant Collections]"
-for col in automem conversations mem0_memories; do
+for col in L0_capture conversations L3_facts_memories; do
     if curl -sf "http://127.0.0.1:$QDRANT_PORT/collections/$col" >/dev/null 2>&1; then
         echo "  ✓ Collection $col"; PASS=$((PASS+1))
     else

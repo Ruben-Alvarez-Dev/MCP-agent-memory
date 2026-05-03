@@ -1,6 +1,6 @@
 """Simple async task tracker for background operations.
 
-Used by autodream to run dream cycles without blocking the MCP client.
+Used by L0_to_L4_consolidation to run dream cycles without blocking the MCP client.
 Tasks auto-expire after 1 hour.
 """
 from __future__ import annotations

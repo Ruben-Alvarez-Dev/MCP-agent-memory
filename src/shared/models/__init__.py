@@ -1,10 +1,10 @@
 """Shared data models for all MCP memory servers.
 
 Canonical data contracts used across:
-  - automem    (L0/L1/L2 ingest daemon)
-  - autodream  (L3/L4 consolidation daemon)
-  - vk-cache   (L5 context assembly + bidirectional protocol)
-  - conversation-store, mem0, engram
+  - L0_capture    (L0/L1/L2 ingest daemon)
+  - L0_to_L4_consolidation  (L3/L4 consolidation daemon)
+  - L5_routing   (L5 context assembly + bidirectional protocol)
+  - L2_conversations, L3_facts, L3_decisions
   - skills     (agent instruction sets)
 """
 
@@ -29,11 +29,11 @@ class MemoryLayer(int, Enum):
     """6-layer memory stack."""
 
     RAW = 0          # Event lake — append-only audit
-    WORKING = 1      # Steps, facts, hot dialogue (mem0)
+    WORKING = 1      # Steps, facts, hot dialogue (L3_facts)
     EPISODIC = 2     # Conversations, incidents, tech episodes
-    SEMANTIC = 3     # Decisions, entities, patterns (engram)
+    SEMANTIC = 3     # Decisions, entities, patterns (L3_decisions)
     CONSOLIDATED = 4 # Summaries, narratives, dream
-    CONTEXT = 5      # Ephemeral context packs (vk-cache)
+    CONTEXT = 5      # Ephemeral context packs (L5_routing)
 
 
 class MemoryType(str, Enum):
@@ -100,10 +100,10 @@ class MemoryItem(BaseModel):
     """A single memory item at a specific layer and scope.
 
     Lifecycle:
-      L0 RAW → L1 WORKING  (automem, every turn)
-      L1 → L2 EPISODIC     (autodream, every N turns)
-      L2 → L3 SEMANTIC     (autodream, hourly)
-      L3 → L4 CONSOLIDATED (autodream, nightly)
+      L0 RAW → L1 WORKING  (L0_capture, every turn)
+      L1 → L2 EPISODIC     (L0_to_L4_consolidation, every N turns)
+      L2 → L3 SEMANTIC     (L0_to_L4_consolidation, hourly)
+      L3 → L4 CONSOLIDATED (L0_to_L4_consolidation, nightly)
     """
 
     memory_id: str = Field(default_factory=lambda: str(uuid.uuid4()))

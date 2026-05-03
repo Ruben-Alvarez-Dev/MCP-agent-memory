@@ -28,15 +28,15 @@ logger = logging.getLogger("agent-memory.api")
 # These point to the SAME functions registered as MCP tools — zero duplication.
 
 _ingest_event_fn: Callable | None = None
-_automem_heartbeat_fn: Callable | None = None
-_autodream_heartbeat_fn: Callable | None = None
+_L0_capture_heartbeat_fn: Callable | None = None
+_L0_to_L4_consolidation_heartbeat_fn: Callable | None = None
 _save_conversation_fn: Callable | None = None
 _consolidate_fn: Callable | None = None
 _request_context_fn: Callable | None = None
 
 # v1.4: verify-memories uses Qdrant directly (no MCP tool needed)
 QDRANT_URL = os.getenv("QDRANT_URL", "http://127.0.0.1:6333")
-QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "automem")
+QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "L0_L4_memory")
 
 
 async def _verify_memories(body: dict) -> dict:
@@ -238,12 +238,12 @@ class _ApiHandler(BaseHTTPRequestHandler):
                 result = _run_async(_ingest_event_fn(**body))
                 self._json_response(200, self._serialize(result))
 
-            elif self.path == "/api/heartbeat" and _automem_heartbeat_fn:
-                result = _run_async(_automem_heartbeat_fn(**body))
+            elif self.path == "/api/heartbeat" and _L0_capture_heartbeat_fn:
+                result = _run_async(_L0_capture_heartbeat_fn(**body))
                 self._json_response(200, self._serialize(result))
 
-            elif self.path == "/api/heartbeat-dream" and _autodream_heartbeat_fn:
-                result = _run_async(_autodream_heartbeat_fn(**body))
+            elif self.path == "/api/heartbeat-dream" and _L0_to_L4_consolidation_heartbeat_fn:
+                result = _run_async(_L0_to_L4_consolidation_heartbeat_fn(**body))
                 self._json_response(200, self._serialize(result))
 
             elif self.path == "/api/save-conversation" and _save_conversation_fn:
@@ -335,12 +335,12 @@ def start_api_server(
     Returns:
         The HTTPServer instance (for testing / graceful shutdown).
     """
-    global _ingest_event_fn, _automem_heartbeat_fn, _autodream_heartbeat_fn
+    global _ingest_event_fn, _L0_capture_heartbeat_fn, _L0_to_L4_consolidation_heartbeat_fn
     global _save_conversation_fn, _consolidate_fn, _request_context_fn
 
     _ingest_event_fn = ingest_event_fn
-    _automem_heartbeat_fn = automem_heartbeat_fn
-    _autodream_heartbeat_fn = autodream_heartbeat_fn
+    _L0_capture_heartbeat_fn = automem_heartbeat_fn
+    _L0_to_L4_consolidation_heartbeat_fn = autodream_heartbeat_fn
     _save_conversation_fn = save_conversation_fn
     _consolidate_fn = consolidate_fn
     _request_context_fn = request_context_fn

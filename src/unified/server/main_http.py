@@ -35,13 +35,13 @@ mcp = FastMCP("unified-memory-server")
 # ── Load all modules (same as main.py) ──────────────────────────
 
 _MODULES = [
-    ("automem",             "automem/"),
-    ("autodream",           "autodream/"),
-    ("vk_cache",            "vk-cache/"),
-    ("conversation_store",  "conversation-store/"),
+    ("L0_capture",             "automem/"),
+    ("L0_to_L4_consolidation",           "autodream/"),
+    ("L5_routing",            "vk-cache/"),
+    ("L2_conversations",  "conversation-store/"),
     ("mem0",                "mem0/"),
     ("engram",              "engram/"),
-    ("sequential_thinking", "sequential-thinking/"),
+    ("Lx_reasoning", "sequential-thinking/"),
 ]
 
 _loaded = []
