@@ -104,18 +104,18 @@ def test_thread_list_result_empty():
 
 def test_status_result_fields():
     result = ConversationStatusResult(
-        daemon="conversation-store",
+        daemon="L2_conversations",
         status="RUNNING",
         threads=42,
     )
-    assert result.daemon == "conversation-store"
+    assert result.daemon == "L2_conversations"
     assert result.status == "RUNNING"
     assert result.threads == 42
 
 
 def test_status_result_defaults():
     result = ConversationStatusResult()
-    assert result.daemon == "conversation-store"
+    assert result.daemon == "L2_conversations"
     assert result.status == "RUNNING"
     assert result.threads == 0
 

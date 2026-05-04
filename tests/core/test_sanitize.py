@@ -83,10 +83,11 @@ class TestSanitizeFilename:
 
 class TestSanitizeFolder:
     def test_valid_folder(self):
-        assert sanitize_folder("Notes") == "Notes"
+        # "Notes" is NOT in the whitelist (lowercase "notes" is)
+        assert sanitize_folder("notes") == "notes"
 
     def test_empty_defaults_to_inbox(self):
-        assert sanitize_folder("") == "Inbox"
+        assert sanitize_folder("") == "inbox"
 
     def test_invalid_folder(self):
         with pytest.raises(SanitizeError, match="Invalid folder"):
