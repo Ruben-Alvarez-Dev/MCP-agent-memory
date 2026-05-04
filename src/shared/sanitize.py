@@ -85,6 +85,18 @@ _WINDOWS_RESERVED = frozenset({
     "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
 })
 
+# Unix/system filenames that should never be used as note filenames
+# Prevents creating shadow files (passwd, hosts, crontab, etc.)
+_UNIX_RESERVED = frozenset({
+    "passwd", "shadow", "group", "hosts", "hostname", "resolv",
+    "fstab", "mtab", "crontab", "sudoers", "sshd_config", "profile",
+    "bashrc", "zshrc", "bash_profile", "zprofile", "zshenv", "login",
+    "logout", "environment", "aliases", "functions", "motd", "issue",
+    "inittab", "sysctl", "exports", "auto_master", "cron",
+    ".bash_history", ".zsh_history", ".zsh_sessions", ".ssh",
+    ".gitconfig", ".gitignore", ".npmrc", ".pypirc", ".netrc",
+})
+
 # Characters forbidden in filenames across all OS
 # Windows: < > : " / \\ | ? *
 # macOS: :
@@ -432,6 +444,12 @@ def sanitize_filename(filename: str, *, field: str = "filename") -> str:
             f"{field} is a reserved system name: '{stem_upper}'"
         )
 
+    # 13. Unix/system reserved name check (case-sensitive for dotfiles, insensitive for others)
+    if filename in _UNIX_RESERVED or filename.lower() in _UNIX_RESERVED:
+        raise SanitizeError(
+            f"{field} is a reserved system name: '{filename}'"
+        )
+
     return filename
 
 
@@ -525,11 +543,24 @@ def sanitize_thread_id(thread_id: str) -> str:
 
 # ── Structured field sanitization ──────────────────────────────────
 
+# Javascript/JSON prototype pollution keys — MUST NEVER appear as tags
+# All lowercase since sanitize_tags normalizes to lowercase before comparison
+_PROTO_POLLUTION_BLOCKLIST = frozenset({
+    "__proto__", "constructor", "prototype",
+    "__definegetter__", "__definesetter__",
+    "__lookupgetter__", "__lookupsetter__",
+    "hasownproperty",
+    "isprototypeof", "propertyisenumerable",
+    "tolocalestring", "tostring", "valueof",
+    "__constructor__", "__parent__", "__child__",
+})
+
 def sanitize_tags(tags: str) -> list[str]:
     """Parse and sanitize comma-separated tags.
 
     Pipeline: split by comma → strip → lowercase → NFKC →
               remove special chars → deduplicate → length/count limits
+              → block prototype pollution keys
     """
     if not isinstance(tags, str):
         return []
@@ -547,6 +578,9 @@ def sanitize_tags(tags: str) -> list[str]:
         tag = tag.strip('-.')
 
         if not tag or len(tag) > MAX_TAG_LENGTH:
+            continue
+        # Block prototype pollution keys
+        if tag in _PROTO_POLLUTION_BLOCKLIST:
             continue
         if tag not in seen:
             seen.add(tag)

@@ -132,6 +132,7 @@ class SaveDecisionResult(BaseModel):
     status: str = "saved"
     file_path: str
     title: str
+    error: str = ""
 
 class DecisionListResult(BaseModel):
     count: int

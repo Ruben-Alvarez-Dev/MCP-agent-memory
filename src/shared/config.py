@@ -120,6 +120,15 @@ class Config:
             errors.append("QDRANT_URL is empty")
         elif not self.qdrant_url.startswith(("http://", "https://")):
             errors.append(f"QDRANT_URL must be http(s) URL, got {self.qdrant_url}")
+        else:
+            # Validate port is in valid range
+            try:
+                from urllib.parse import urlparse
+                port = urlparse(self.qdrant_url).port
+                if port is not None and not (1 <= port <= 65535):
+                    errors.append(f"QDRANT_URL port out of range: {port}")
+            except Exception:
+                pass
 
         # Embedding backend
         valid_embed_backends = {"llama_cpp", "llama_server", "http", "noop"}

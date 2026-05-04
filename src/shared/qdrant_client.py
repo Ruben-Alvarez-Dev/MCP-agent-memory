@@ -17,11 +17,31 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 from typing import Any, Optional
 
 import httpx
 
 logger = logging.getLogger(__name__)
+
+# Qdrant-reserved payload keys that must never be used (they conflict with
+# the point structure: id, vector, sparse_vectors, payload)
+_QDRANT_RESERVED_KEYS = frozenset({"id", "vector", "sparse_vectors", "payload"})
+_PAYLOAD_KEY_RE = re.compile(r'^[a-zA-Z_][a-zA-Z0-9_]*$')
+
+
+def _validate_payload_keys(payload: dict[str, Any], point_id: str = "?") -> None:
+    """Validate payload keys to prevent injection into Qdrant internals."""
+    for key in payload:
+        if key in _QDRANT_RESERVED_KEYS:
+            raise ValueError(
+                f"Payload key '{key}' is reserved by Qdrant (point {point_id})"
+            )
+        if not _PAYLOAD_KEY_RE.match(key):
+            raise ValueError(
+                f"Invalid payload key '{key}': must match ^[a-zA-Z_][a-zA-Z0-9_]*$ "
+                f"(point {point_id})"
+            )
 
 
 class QdrantClient:
@@ -155,12 +175,17 @@ class QdrantClient:
         sparse: Optional[dict] = None,
         wait: bool = True,
     ) -> None:
-        """Insert or update a single point."""
+        """Insert or update a single point.
+
+        Payload keys are validated to prevent injection of Qdrant-internal
+        keys (e.g., 'vector', 'id') that could corrupt point data.
+        """
         if not vector or len(vector) != self.embedding_dim:
             raise ValueError(
                 f"Invalid vector for point {point_id}: "
                 f"got {len(vector) if vector else 0} dims, expected {self.embedding_dim}"
             )
+        _validate_payload_keys(payload, point_id)
         payload["schema_version"] = payload.get("schema_version", "1.0")
         point: dict[str, Any] = {
             "id": point_id,
@@ -184,15 +209,18 @@ class QdrantClient:
         points: list[dict[str, Any]],
         wait: bool = True,
     ) -> None:
-        """Insert or update multiple points."""
+        """Insert or update multiple points with payload key validation."""
         for p in points:
+            pid = p.get("id", "?")
             v = p.get("vector", [])
             if not v or len(v) != self.embedding_dim:
                 raise ValueError(
-                    f"Invalid vector for point {p.get('id', '?')}: "
+                    f"Invalid vector for point {pid}: "
                     f"got {len(v) if v else 0} dims, expected {self.embedding_dim}"
                 )
-            p.setdefault("payload", {})["schema_version"] = p["payload"].get("schema_version", "1.0")
+            payload = p.setdefault("payload", {})
+            _validate_payload_keys(payload, pid)
+            payload["schema_version"] = payload.get("schema_version", "1.0")
 
         async def _do():
             client = await self._get_client()

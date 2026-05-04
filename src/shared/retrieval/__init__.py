@@ -326,6 +326,9 @@ def _rank_and_fuse(
                 + (recency * 0.2)
                 + (freshness * 0.3)
             )
+            # Clamp to [0, 1] — negative scores from sparse vectors
+            # or cosine distance edge cases should not produce negative rankings
+            item.combined_score = max(0.0, min(1.0, item.combined_score))
             all_items.append(item)
     all_items.sort(key=lambda x: x.combined_score, reverse=True)
 

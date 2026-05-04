@@ -8,7 +8,7 @@ from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 from shared.env_loader import load_env; load_env()
 from shared.config import Config
-from shared.sanitize import validate_save_decision, validate_vault_write, sanitize_filename, sanitize_text, sanitize_thread_id, validate_json_field
+from shared.sanitize import validate_save_decision, validate_vault_write, sanitize_filename, sanitize_text, sanitize_thread_id, validate_json_field, SanitizeError
 from shared.result_models import SaveDecisionResult, DecisionListResult, VaultWriteResult, VaultIntegrityResult, VaultNotesResult, ModelPackResult, ModelPackListResult, L3DecisionsStatusResult as EngramStatusResult
 
 config = Config.from_env()
@@ -27,9 +27,12 @@ def _read(f):
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False))
 async def save_decision(title: str, content: str = "", category: str = "general", tags: str = "", scope: str = "agent", body: str = "") -> SaveDecisionResult:
     """Save an architectural decision as a Markdown file."""
-    # If body is provided and content is empty, use body as content
-    effective_content = body if body else content
-    clean = validate_save_decision(title, effective_content, category, tags, scope)
+    try:
+        # If body is provided and content is empty, use body as content
+        effective_content = body if body else content
+        clean = validate_save_decision(title, effective_content, category, tags, scope)
+    except SanitizeError as e:
+        return SaveDecisionResult(status="error", file_path="", title=title, error=str(e))
     ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     fn = sanitize_filename(f"{ts}-{clean['title'][:50]}")
     td = ENGRAM_PATH / clean["category"]; td.mkdir(parents=True, exist_ok=True)

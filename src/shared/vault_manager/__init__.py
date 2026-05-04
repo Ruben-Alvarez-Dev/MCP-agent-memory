@@ -1,6 +1,7 @@
 from __future__ import annotations
 from ..vault_constants import (FOLDER_INBOX, FOLDER_DECISIONS, FOLDER_KNOWLEDGE, FOLDER_EPISODES, FOLDER_ENTITIES, FOLDER_NOTES, FOLDER_PEOPLE, FOLDER_TEMPLATES, EN_TO_ES, ES_TO_EN, LAYER_MAP, TYPE_CODES, get_all_disk_folders, get_all_en_folders, get_layer, get_type_code)
-from ..vault_constants import (FOLDER_INBOX, FOLDER_DECISIONS, FOLDER_KNOWLEDGE, FOLDER_EPISODES, FOLDER_ENTITIES, FOLDER_NOTES, FOLDER_PEOPLE, FOLDER_TEMPLATES, EN_TO_ES, ES_TO_EN, LAYER_MAP, TYPE_CODES, get_all_disk_folders, get_all_en_folders, get_layer, get_type_code)
+from ..sanitize import sanitize_filename
+from ..sanitize import SanitizeError
 """Vault Manager — Obsidian vault with catastrophe-proof writes.
 
 Manages the human-readable vault that complements Qdrant.
@@ -84,6 +85,32 @@ class VaultManager:
         self.Lx_persistent_path = Lx_persistent_path or VAULT_PATH
         self._ensure_structure()
 
+    @staticmethod
+    def _sanitize_vault_path(folder: str, filename: str) -> tuple[str, str]:
+        """Sanitize folder and filename for vault operations.
+
+        Prevents path traversal (../../etc/passwd) and ensures filenames
+        are safe for filesystem use. Returns (folder, filename) tuple.
+
+        Security: uses os.path.basename() to strip ALL directory components,
+        then rejects any remaining path separators and null bytes.
+        """
+        # Folder: basename + reject separators/traversal
+        if not isinstance(folder, str) or not folder.strip():
+            folder = "inbox"
+        folder = os.path.basename(folder).strip()
+        if '/' in folder or '\\' in folder or '..' in folder or '\x00' in folder:
+            raise SanitizeError("Invalid folder: path traversal detected")
+
+        # Filename: basename + reject traversal/null bytes
+        if not isinstance(filename, str) or not filename.strip():
+            raise SanitizeError("filename cannot be empty")
+        filename = os.path.basename(filename)
+        if '..' in filename or '\x00' in filename:
+            raise SanitizeError("filename contains path traversal or null bytes")
+
+        return folder, filename
+
     def _ensure_structure(self):
         """Create vault structure if not exists."""
         dirs = [
@@ -135,6 +162,7 @@ class VaultManager:
         Returns:
             Path to the written file.
         """
+        folder, filename = self._sanitize_vault_path(folder, filename)
         dest = self.Lx_persistent_path / folder / filename
 
         # Check if file is human-authored
@@ -200,6 +228,7 @@ class VaultManager:
         author: str = "system",
     ) -> Path:
         """Append content to an existing note atomically."""
+        folder, filename = self._sanitize_vault_path(folder, filename)
         dest = self.Lx_persistent_path / folder / filename
 
         if not dest.exists():
@@ -704,31 +733,72 @@ class VaultManager:
         except Exception:
             return None
 
+    @staticmethod
+    def _pid_is_alive(pid: int) -> bool:
+        """Check if a process with the given PID is still running."""
+        try:
+            os.kill(pid, 0)
+            return True
+        except (OSError, ProcessLookupError):
+            return False
+
     def _acquire_lock(self, lock_path: Path):
-        """Acquire a lock file with timeout."""
+        """Acquire a lock file with timeout, PID liveness check, and atomic creation.
+
+        Strategy:
+        1. If lock exists and is stale (expired timestamp) AND the owning PID is dead → steal it.
+        2. If lock exists and owner is still alive → wait (respect the active holder).
+        3. If lock doesn't exist → create atomically with O_EXCL.
+        """
         start = time.monotonic()
         while True:
             if lock_path.exists():
                 try:
                     lock_data = json.loads(lock_path.read_text())
                     age = time.time() - lock_data.get("timestamp", 0)
-                    if age > LOCK_TIMEOUT:
-                        # Stale lock
+                    lock_pid = lock_data.get("pid")
+
+                    # Only steal the lock if it's stale AND the owner is dead
+                    owner_alive = (
+                        isinstance(lock_pid, int)
+                        and self._pid_is_alive(lock_pid)
+                    )
+
+                    if age > LOCK_TIMEOUT and not owner_alive:
+                        # Stale lock from a dead process — safe to steal
                         lock_path.unlink()
-                        break
+                    elif age > LOCK_TIMEOUT and owner_alive:
+                        # Lock is expired but owner is STILL ALIVE — give it more time.
+                        # This handles slow operations (large file writes, network latency).
+                        # Log and continue waiting instead of stealing.
+                        pass
+                    # else: lock is fresh, just wait
                 except Exception:
-                    lock_path.unlink()
-                    break
+                    # Corrupt lock file — try to clean up
+                    try:
+                        lock_path.unlink()
+                    except FileNotFoundError:
+                        pass
 
                 if time.monotonic() - start > LOCK_TIMEOUT:
                     raise TimeoutError(f"Could not acquire lock: {lock_path}")
                 time.sleep(0.1)
-            else:
-                lock_path.write_text(json.dumps({
+                continue
+
+            # Atomic create-or-fail to prevent race conditions
+            try:
+                fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                os.write(fd, json.dumps({
                     "pid": os.getpid(),
                     "timestamp": time.time(),
-                }))
+                }).encode())
+                os.close(fd)
                 break
+            except FileExistsError:
+                # Another process beat us — retry
+                if time.monotonic() - start > LOCK_TIMEOUT:
+                    raise TimeoutError(f"Could not acquire lock: {lock_path}")
+                time.sleep(0.05)
 
     def _release_lock(self, lock_path: Path):
         """Release a lock file."""

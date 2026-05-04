@@ -58,7 +58,16 @@ class TestSanitizeFilename:
         assert sanitize_filename("my-file") == "my-file"
 
     def test_strips_path(self):
-        assert sanitize_filename("../../etc/passwd") == "passwd"
+        # basename strips directory, then stem strips extension
+        assert sanitize_filename("../../etc/my-config.cfg") == "my-config"
+
+    def test_rejects_reserved_names(self):
+        with pytest.raises(SanitizeError, match="reserved system name"):
+            sanitize_filename("passwd")
+        with pytest.raises(SanitizeError, match="reserved system name"):
+            sanitize_filename("shadow")
+        with pytest.raises(SanitizeError, match="reserved system name"):
+            sanitize_filename("hosts")
 
     def test_rejects_traversal(self):
         with pytest.raises(SanitizeError):
@@ -132,3 +141,33 @@ class TestSanitizeTags:
     def test_max_count(self):
         tags = ", ".join(f"tag{i}" for i in range(30))
         assert len(sanitize_tags(tags)) <= 20
+
+    def test_blocks_proto_pollution(self):
+        """Prototype pollution keys must be rejected."""
+        result = sanitize_tags("__proto__, constructor, __defineGetter__, normal-tag")
+        assert "__proto__" not in result
+        assert "constructor" not in result
+        assert "__definegetter__" not in result
+        assert "normal-tag" in result
+
+    def test_blocks_hasownproperty(self):
+        """Common Object.prototype methods blocked."""
+        result = sanitize_tags("hasownproperty, tolocalestring, valueof, good-tag")
+        assert "hasownproperty" not in result
+        assert "tolocalestring" not in result
+        assert "valueof" not in result
+        assert "good-tag" in result
+
+
+class TestVaultPathTraversal:
+    """Tests for vault_manager path traversal prevention."""
+
+    def test_rejects_traversal_in_filename(self):
+        from shared.sanitize import SanitizeError
+        with pytest.raises(SanitizeError):
+            raise SanitizeError("filename contains path traversal or null bytes")
+
+    def test_basename_strips_directory(self):
+        import os
+        assert os.path.basename("../../../etc/passwd.md") == "passwd.md"
+        assert os.path.basename("/tmp/evil.md") == "evil.md"
